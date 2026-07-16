@@ -455,12 +455,20 @@ sillytavern_update_confirm_and_execute() {
     if git_worktree_has_changes "$ST_PATH"; then
         ui_warning "检测到未提交的本地文件变化；官方 --autostash 会尝试临时保存并恢复这些变化。"
     fi
-    ui_warning "Phase 4 尚未实现，更新前不会自动创建 protective 数据备份。"
     printf '确认执行官方更新命令 git pull --rebase --autostash？[y/N] '
     IFS= read -r confirm || return 1
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         ui_info "已取消更新。"
         return 0
+    fi
+
+    if [[ "${AUTO_BACKUP_BEFORE_UPDATE:-false}" == true ]]; then
+        ui_info "更新前正在创建 protective 数据备份..."
+        if ! backup_create protective "before-sillytavern-update"; then
+            ui_error "保护备份失败，已取消 SillyTavern 更新：$BACKUP_LAST_ERROR"
+            return 1
+        fi
+        ui_success "更新前保护备份已完成。"
     fi
 
     ui_info "正在更新 SillyTavern..."

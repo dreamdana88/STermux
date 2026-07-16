@@ -31,12 +31,14 @@ create_isolated_project() {
     cp -- "$PROJECT_ROOT/manager.sh" "$target/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
+        "$PROJECT_ROOT/core/backup.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
         "$target/core/" || return 1
     cp -- \
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
         "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$target/modules/sillytavern/" || return 1
@@ -54,10 +56,12 @@ create_fake_sillytavern() {
     local target="$1"
     local launch_line="$2"
 
-    mkdir -p -- "$target" || return 1
+    mkdir -p -- "$target/data/default-user/chats" || return 1
     printf '%s\n' '#!/usr/bin/env bash' "$launch_line" > "$target/start.sh" || return 1
     printf '%s\n' '// test fixture' > "$target/server.js" || return 1
     printf '%s\n' '{"name":"sillytavern"}' > "$target/package.json" || return 1
+    printf '%s\n' 'dataRoot: ./data' > "$target/config.yaml" || return 1
+    printf '%s\n' 'isolated chat fixture' > "$target/data/default-user/chats/chat.txt" || return 1
 }
 
 run_user_config_isolation_regression() {
@@ -76,12 +80,14 @@ run_user_config_isolation_regression() {
     cp -- "$PROJECT_ROOT/manager.sh" "$poison_source/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
+        "$PROJECT_ROOT/core/backup.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
         "$poison_source/core/" || return 1
     cp -- \
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
         "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$poison_source/modules/sillytavern/" || return 1
@@ -160,6 +166,15 @@ extension_menu_status=$?
 [[ "$extension_menu_output" == *"第三方扩展"* ]] || fail "主菜单未进入第三方扩展管理"
 [[ "$extension_menu_output" == *"4. 更新全部允许自动更新的扩展"* ]] || fail "扩展菜单缺少批量更新入口"
 [[ "$extension_menu_output" == *"第三方扩展更新策略"* ]] || fail "扩展菜单缺少策略查看入口"
+
+backup_menu_output="$(printf '5\n1\n\n2\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+backup_menu_status=$?
+(( backup_menu_status == 0 )) || fail "备份菜单返回退出码 $backup_menu_status"
+[[ "$backup_menu_output" == *"备份与恢复"* ]] || fail "主菜单未进入备份与恢复页面"
+[[ "$backup_menu_output" == *"手动备份创建成功"* ]] || fail "管理器未能创建隔离 manual 备份"
+[[ "$backup_menu_output" == *"manual"* ]] || fail "备份列表未显示 manual 类型"
+find "$isolated_project/backups/sillytavern" -mindepth 1 -maxdepth 1 -type d | grep -q . \
+    || fail "隔离管理器没有生成备份目录"
 
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"

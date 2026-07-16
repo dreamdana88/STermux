@@ -6,13 +6,13 @@
 
 ## 当前状态
 
-当前阶段：Phase 3
+当前阶段：Phase 4
 
-阶段名称：第三方扩展更新
+阶段名称：备份核心
 
-状态：Phase 3 本地实现与隔离自动测试通过，待 Android Termux 实机验证
+状态：Phase 4 本地实现与隔离自动测试通过，待 Android Termux 实机验证
 
-最后更新：2026-07-16（Phase 3 待实机验证；Phase 4 自动备份池默认上限调整为 2，备份逻辑尚未实施）
+最后更新：2026-07-16（Phase 3 已完成；Phase 4 本地通过，待 Android Termux 实机验证）
 
 ---
 
@@ -24,8 +24,8 @@
 | Phase 2 | SillyTavern 更新 | 已完成 |
 | Phase 2.5 | SillyTavern 安装与首次配置 | 已完成 |
 | Phase 2.6 | STermux 自更新 | 已完成 |
-| Phase 3 | 第三方扩展更新   | 本地通过，待实机验证 |
-| Phase 4 | 备份核心         | 未开始 |
+| Phase 3 | 第三方扩展更新   | 已完成 |
+| Phase 4 | 备份核心         | 本地通过，待实机验证 |
 | Phase 5 | 定时备份         | 未开始 |
 | Phase 6 | 版本回退         | 未开始 |
 | Phase 7 | 模块系统整理     | 未开始 |
@@ -80,20 +80,21 @@
 
 ## 当前开发中功能
 
-暂无。Phase 3 代码与本地测试已完成，等待 Android Termux 实机验证。
+暂无。Phase 4 本地实现与隔离自动测试已通过，等待 Android Termux 实机验证。
 
 ---
 
 ## 待验证功能
 
 - Phase 1 终端主菜单社区标题边框的 Android Termux 目视复测
-- Phase 3 第三方扩展管理的 Android Termux 实机验证
+- Phase 4 完成后的 Android Termux 真实备份与恢复验证
 
 ---
 
 ## 已知问题
 
-暂无已知未修复问题。
+- 第三方扩展显示名可能与目录名不一致；暂作为未来 UI 优化事项，不扩展 Phase 3 范围。
+- Phase 4 V1 仅处理官方默认 `config.yaml + data/` 布局；检测到自定义 `dataRoot` 时会明确拒绝备份，避免产生漏数据的伪成功结果。
 
 范围说明：Phase 3 按计划只管理 `public/scripts/extensions/third-party` 中为所有用户安装的扩展；新版 SillyTavern 的按用户扩展目录不在本阶段范围内。
 
@@ -160,6 +161,17 @@
 - `config/default.conf` 已预置 `AUTOMATIC_BACKUP_KEEP=2`；Phase 4 实施时，每次成功创建自动备份后按时间保留最新 2 份。
 - Phase 4 计划新增手动清理：支持单个和多选删除任意类型备份，默认 N 二次确认、单项失败隔离、删除日志和严格路径越界保护。
 - catchup 计划明确为错过计划任务后的单次补偿；无论错过多少周期，下一次合适启动最多补做 1 份。
+- Phase 3 Android Termux 实机验收通过：成功识别 15 个 third-party 一级扩展，Git/非 Git 扫描与分类正常。
+- 实机完成 manual 策略设置、列表显示、持久化和取消；策略修改未移动、删除或破坏扩展目录。
+- 实机当时没有存在可用更新的扩展，因此未触发真实 Git 扩展更新；单个、多选和批量更新流程已由隔离自动测试覆盖，未来自然出现更新时可补充观察，不阻塞 Phase 3 验收。
+- 新增 `core/backup.sh` 与 `modules/sillytavern/backup-rules.sh`，统一实现 manual、protective、scheduled、catchup 四类备份及元数据。
+- 备份内容按当前官方默认结构覆盖整个 `data/` 并保存 `config.yaml`；归档成功后执行可读性、非空及元数据验证，再原子移动到正式备份目录。
+- 主菜单新增“备份与恢复”，支持列表、manual 创建、恢复、单个删除和安全多选批量删除。
+- manual 永不参与自动轮换；protective、scheduled、catchup 共用自动池并只保留创建时间最新 2 份。
+- 删除操作只允许经过校验的备份根目录直属条目，自动删除显式拒绝 manual；批量删除单项失败不阻断后续项并写入日志。
+- 恢复前先验证归档成员并创建 protective 备份，当前数据通过同目录暂存与移动替换，失败时尝试回滚，不直接递归删除当前 `data`。
+- SillyTavern 本体更新在用户确认后先创建 protective 备份；保护备份失败会取消 Git 更新。
+- 新增 `tests/test_backup.sh`，全部使用临时 SillyTavern、备份根目录与更新 Mock；完整本地测试由 9 项增至 10 项，结果 10/10 通过。
 
 ---
 
@@ -237,24 +249,46 @@
 
 | 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
 | ---- | -------- | ------------------- | ----------- | ---- |
+| Bash 语法 | 通过 | Git Bash 通过 | 通过 | 已完成 |
+| 全局 third-party 一级目录扫描 | Git/非 Git/空目录 Fixture 通过 | Git Bash 通过 | 识别 15 个一级扩展 | 已完成 |
+| 中文、空格扩展路径 | 通过 | Git Bash 通过 | 扫描正常 | 已完成 |
+| latest、可更新与仅手动可更新状态 | 本地裸 Git 远程通过 | Git Bash 通过 | 分类显示正常；当时无可用更新 | 已完成 |
+| 无 upstream 与 fetch 失败 | 通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 单个与多选更新 | 非法编号过滤、逗号/空格和去重通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 批量跳过仅手动与非 Git 扩展 | 通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 单项 pull 失败继续后续扩展 | 模拟 pull 失败后后续真实本地更新通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 用户主动更新仅手动扩展 | 通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 策略保存、取消与内容保留 | 临时策略文件通过 | Git Bash 通过 | 设置、显示、保存与取消通过 | 已完成 |
+| 扩展更新日志 | 成功、失败、跳过记录通过 | Git Bash 通过 | 自动测试覆盖 | 已完成 |
+| 扫描与策略修改不破坏扩展 | 隔离目录断言通过 | Git Bash 通过 | 扩展仍存在，无移动或删除 | 已完成 |
+| 真实用户配置与扩展隔离 | 管理器 Fixture 与临时根目录通过 | Git Bash 通过 | 不适用 | 已完成 |
+
+---
+
+## Phase 4 测试矩阵
+
+| 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
+| ---- | -------- | ------------------- | ----------- | ---- |
 | Bash 语法 | 通过 | Git Bash 通过 | 待测试 | 待实机验证 |
-| 全局 third-party 一级目录扫描 | Git/非 Git/空目录 Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 中文、空格扩展路径 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| latest、可更新与仅手动可更新状态 | 本地裸 Git 远程通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 无 upstream 与 fetch 失败 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 单个与多选更新 | 非法编号过滤、逗号/空格和去重通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 批量跳过仅手动与非 Git 扩展 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 单项 pull 失败继续后续扩展 | 模拟 pull 失败后后续真实本地更新通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 用户主动更新仅手动扩展 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 策略保存、取消与内容保留 | 临时策略文件通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 扩展更新日志 | 成功、失败、跳过记录通过 | Git Bash 通过 | 待测试 | 本地通过 |
-| 真实用户配置与扩展隔离 | 管理器 Fixture 与临时根目录通过 | Git Bash 通过 | 不适用 | 本地通过 |
+| manual 与四类元数据 | 临时数据 Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 归档非空、可读取与成功状态 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 自动池混合类型仅保留最新 2 份 | protective/scheduled/catchup 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| manual 自动清理隔离 | 自动轮换和自动删除接口均拒绝 manual | Git Bash 通过 | 待测试 | 本地通过 |
+| 列表时间、类型、大小和标识 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 单删、批删、取消、非法与重复编号 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 单项删除失败继续后续项 | 删除函数 Mock 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 根目录、越界、穿越和符号链接保护 | 临时外部哨兵通过；符号链接在兼容环境执行 | Git Bash 路径边界通过 | 待测试 | 本地通过 |
+| 恢复与恢复前 protective | 数据和 config.yaml 往返通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 更新前 protective 联动 | 更新与失败路径 Mock 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 自定义 dataRoot 安全拒绝 | 通过，未写入成功备份 | Git Bash 通过 | 待测试 | 本地通过 |
+| 真实用户配置、数据与备份隔离 | 临时项目与独立 Fixture 通过 | Git Bash 通过 | 不适用 | 本地通过 |
+| 完整回归 | 10/10 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 
 ---
 
 ## 下一步
 
-在 Android Termux 对真实全局 third-party 扩展执行扫描、状态检查、选择性更新、批量跳过和失败隔离验收；验收通过前 Phase 3 不标记为完成，也不进入 Phase 4。
+严格按 Phase 4 范围完成备份核心；本地验证通过后保持“待 Android Termux 实机验证”，不进入 Phase 5。
 
 ---
 
@@ -267,3 +301,7 @@
 2026-07-16：Phase 2.5 在纯净 Android Termux 完成依赖安装、完整 clone、路径保存和首次启动验收。
 
 2026-07-16：Phase 2.6 在 Android Termux 成功检测 upstream 新 Commit、显示可用更新并完成 fast-forward 自更新，阶段验收通过。
+
+2026-07-16：Phase 3 在 Android Termux 成功扫描 15 个 third-party 一级扩展，Git/非 Git 分类及 manual 策略设置、保存和取消均通过，阶段验收完成。
+
+2026-07-16：Phase 4 备份核心完成本地实现；Bash 语法、隔离备份测试、完整 10/10 回归及 `git diff --check` 通过，等待 Android Termux 实机验收。

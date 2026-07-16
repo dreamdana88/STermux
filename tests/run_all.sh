@@ -9,16 +9,19 @@ PROJECT_ROOT="$(CDPATH= cd -- "$TEST_ROOT/.." && pwd -P)" || exit 1
 syntax_files=(
     "$PROJECT_ROOT/manager.sh"
     "$PROJECT_ROOT/core/config.sh"
+    "$PROJECT_ROOT/core/backup.sh"
     "$PROJECT_ROOT/core/git.sh"
     "$PROJECT_ROOT/core/ui.sh"
     "$PROJECT_ROOT/core/utils.sh"
     "$PROJECT_ROOT/modules/sillytavern/update.sh"
+    "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh"
     "$PROJECT_ROOT/modules/sillytavern/install.sh"
     "$PROJECT_ROOT/modules/sillytavern/extensions.sh"
     "$PROJECT_ROOT/modules/stermux/update.sh"
     "$PROJECT_ROOT/config/default.conf"
     "$TEST_ROOT/run_all.sh"
     "$TEST_ROOT/test_config.sh"
+    "$TEST_ROOT/test_backup.sh"
     "$TEST_ROOT/test_git.sh"
     "$TEST_ROOT/test_install.sh"
     "$TEST_ROOT/test_self_update.sh"
@@ -39,6 +42,7 @@ printf '%s\n\n' '语法检查通过。'
 
 test_files=(
     "$TEST_ROOT/test_config.sh"
+    "$TEST_ROOT/test_backup.sh"
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"
     "$TEST_ROOT/test_git.sh"

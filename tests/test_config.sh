@@ -26,6 +26,10 @@ fail() {
 mkdir -p -- "$TEST_TMP_ROOT/config" || exit 1
 grep -Fxq 'AUTOMATIC_BACKUP_KEEP=2' "$PROJECT_ROOT/config/default.conf" \
     || fail "项目默认自动备份保留数量不是 2"
+grep -Fxq 'BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"' "$PROJECT_ROOT/config/default.conf" \
+    || fail "项目默认备份根目录配置缺失"
+grep -Fxq 'AUTO_BACKUP_BEFORE_UPDATE=true' "$PROJECT_ROOT/config/default.conf" \
+    || fail "项目默认更新前保护备份未启用"
 printf '%s\n' \
     'ST_PATH="$HOME/SillyTavern"' \
     'AUTOMATIC_BACKUP_KEEP=2' \

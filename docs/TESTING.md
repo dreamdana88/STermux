@@ -293,6 +293,9 @@ manual 不计入自动备份池且不参与自动删除
 3. 测试中涉及删除旧备份时，必须先验证目标路径属于测试路径。
 4. manual 备份只能由明确的用户选择和默认 N 的二次确认删除，自动轮换测试绝不得删除 manual Fixture。
 5. 自动备份池测试必须混合 protective、scheduled、catchup，并按创建时间验证仅保留最新 2 份。
+6. `tests/test_backup.sh` 必须自行创建 SillyTavern 数据、配置和备份根目录 Fixture；不得读取真实 `config/user.conf`、真实 `ST_PATH` 或真实备份。
+7. 恢复测试必须先验证归档成员与恢复临时目录边界，不得把路径穿越、符号链接或备份根目录本身交给递归删除。
+8. Phase 4 默认只验证官方独立安装的 `config.yaml + data/` 布局；检测到自定义 `dataRoot` 时必须失败并给出明确原因，禁止用不完整备份冒充成功。
 
 ---
 

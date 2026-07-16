@@ -387,6 +387,8 @@ config/extension-policy.conf
 ```bash
 ST_PATH="$HOME/SillyTavern"
 
+BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"
+
 AUTO_BACKUP_BEFORE_UPDATE=true
 AUTO_BACKUP_BEFORE_ROLLBACK=true
 
@@ -851,6 +853,8 @@ Codex 在实施前必须：
 ```
 
 禁止凭记忆写死所有数据目录。
+
+Phase 4 V1 依据当前官方独立安装结构，备份整个 `data/` 用户数据根目录并单独保存 `config.yaml`。若 `config.yaml` 声明了非默认 `dataRoot`，在尚未能可靠解析并验证该路径前必须明确停止，不能把不完整备份记录为成功。
 
 ---
 

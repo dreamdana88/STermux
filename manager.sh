@@ -28,8 +28,10 @@ load_script_file "$STERMUX_ROOT/core/utils.sh"
 load_script_file "$STERMUX_ROOT/core/config.sh"
 load_script_file "$STERMUX_ROOT/core/ui.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
+load_script_file "$STERMUX_ROOT/core/backup.sh"
 load_script_file "$STERMUX_ROOT/modules/stermux/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
+load_script_file "$STERMUX_ROOT/modules/sillytavern/backup-rules.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/extensions.sh"
 
@@ -172,6 +174,17 @@ open_sillytavern_extensions() {
     sillytavern_extensions_menu
 }
 
+open_backup_center() {
+    if ! sillytavern_path_is_valid "${ST_PATH:-}"; then
+        ui_warning "当前 SillyTavern 路径无效，需要重新设置。"
+        if ! detect_sillytavern_path; then
+            return 1
+        fi
+    fi
+
+    backup_menu
+}
+
 show_main_menu() {
     local installation_status
 
@@ -213,6 +226,9 @@ main_loop() {
                 4)
                     open_sillytavern_extensions || true
                     ;;
+                5)
+                    open_backup_center || true
+                    ;;
                 6)
                     prompt_for_sillytavern_path || true
                     ui_pause
@@ -222,7 +238,7 @@ main_loop() {
                     return 0
                     ;;
                 *)
-                    ui_warning "无效选项，请输入 0、1、2、3、4 或 6。"
+                    ui_warning "无效选项，请输入 0、1、2、3、4、5 或 6。"
                     ui_pause
                     ;;
             esac
