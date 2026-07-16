@@ -148,6 +148,7 @@ stermux_update_program_files_have_changes() {
     changes="$(git -C "$STERMUX_ROOT" status --porcelain --untracked-files=no -- \
         . \
         ':(exclude)config/user.conf' \
+        ':(exclude)config/extension-policy.conf' \
         ':(exclude)data/**' \
         ':(exclude)logs/**' \
         2>/dev/null)" || return 2

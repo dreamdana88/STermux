@@ -56,6 +56,7 @@ ui_main_menu() {
     printf '%s\n' '║ 1. 启动 SillyTavern              ║'
     printf '%s\n' '║ 2. SillyTavern 更新中心          ║'
     printf '%s\n' '║ 3. STermux 更新                  ║'
+    printf '%s\n' '║ 4. 第三方扩展管理                ║'
     printf '%s\n' '║ 6. 设置 SillyTavern 路径         ║'
     printf '%s\n' '║ 0. 退出                          ║'
     printf '%s\n' '╚══════════════════════════════════╝'

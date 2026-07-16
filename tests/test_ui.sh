@@ -47,9 +47,10 @@ while IFS= read -r line; do
     box_line_count=$((box_line_count + 1))
 done <<< "$menu_output"
 
-[[ "$box_line_count" == 7 ]] || fail "菜单内容行数量异常：$box_line_count"
+[[ "$box_line_count" == 8 ]] || fail "菜单内容行数量异常：$box_line_count"
 [[ "$menu_output" == *'║     仅发布在外神们茶话会社区     ║'* ]] || fail "社区标题未使用修正后的居中间距"
 [[ "$menu_output" == *'3. STermux 更新'* ]] || fail "已安装菜单缺少 STermux 更新入口"
+[[ "$menu_output" == *'4. 第三方扩展管理'* ]] || fail "已安装菜单缺少第三方扩展入口"
 
 uninstalled_output="$(ui_uninstalled_menu)"
 box_line_count=0

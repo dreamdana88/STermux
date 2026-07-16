@@ -43,7 +43,9 @@ create_repository_set() {
     printf '%s\n' '#!/usr/bin/env bash' 'printf "manager-v1\n"' > "$SOURCE_REPO/manager.sh"
     printf '%s\n' 'program-v1' > "$SOURCE_REPO/core/program.txt"
     printf '%s\n' '# runtime config' > "$SOURCE_REPO/config/user.conf"
-    git_quiet -C "$SOURCE_REPO" add manager.sh core/program.txt config/user.conf || return 1
+    printf '%s\n' '# extension policy' > "$SOURCE_REPO/config/extension-policy.conf"
+    git_quiet -C "$SOURCE_REPO" add manager.sh core/program.txt \
+        config/user.conf config/extension-policy.conf || return 1
     git_quiet -C "$SOURCE_REPO" commit -m "initial" || return 1
     git_quiet -C "$SOURCE_REPO" remote add origin "$REMOTE_REPO" || return 1
     git_quiet -C "$SOURCE_REPO" push -u origin release || return 1
@@ -71,6 +73,7 @@ ui_initialize
 create_repository_set "main" || fail "无法创建主自更新测试仓库"
 STERMUX_ROOT="$LOCAL_REPO"
 silly_config_value='ST_PATH="$HOME/SillyTavern"'
+extension_policy_value='ManualExtension=manual'
 
 stermux_update_refresh || fail "最新状态检查失败：$STERMUX_UPDATE_ERROR"
 [[ "$STERMUX_UPDATE_STATUS" == "latest" ]] || fail "初始状态不是 latest"
@@ -88,14 +91,17 @@ stermux_update_refresh || fail "远程更新检查失败：$STERMUX_UPDATE_ERROR
 [[ "$STERMUX_UPDATE_STATUS" == "update_available" ]] || fail "未检测到远程更新"
 before_commit="$(git_current_commit "$LOCAL_REPO")"
 printf '%s\n' "$silly_config_value" > "$LOCAL_REPO/config/user.conf"
+printf '%s\n' "$extension_policy_value" > "$LOCAL_REPO/config/extension-policy.conf"
 if stermux_update_program_files_have_changes; then
-    fail "运行时 config/user.conf 被误判为程序文件修改"
+    fail "运行时配置被误判为程序文件修改"
 fi
 stermux_update_execute || fail "ff-only 自更新失败：$STERMUX_UPDATE_ERROR"
 after_commit="$(git_current_commit "$LOCAL_REPO")"
 [[ "$before_commit" != "$after_commit" ]] || fail "自更新成功后 Commit 未变化"
 [[ "$(< "$LOCAL_REPO/core/program.txt")" == "program-v2" ]] || fail "自更新未获取远程程序文件"
 [[ "$(< "$LOCAL_REPO/config/user.conf")" == "$silly_config_value" ]] || fail "自更新覆盖了运行时配置"
+[[ "$(< "$LOCAL_REPO/config/extension-policy.conf")" == "$extension_policy_value" ]] \
+    || fail "自更新覆盖了扩展更新策略"
 grep -Fq $'success\trelease' "$(stermux_update_log_file)" || fail "自更新成功未写日志"
 
 push_remote_program_change "program-v3" || fail "无法创建本地修改拒绝场景"

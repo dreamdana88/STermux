@@ -14,6 +14,7 @@ syntax_files=(
     "$PROJECT_ROOT/core/utils.sh"
     "$PROJECT_ROOT/modules/sillytavern/update.sh"
     "$PROJECT_ROOT/modules/sillytavern/install.sh"
+    "$PROJECT_ROOT/modules/sillytavern/extensions.sh"
     "$PROJECT_ROOT/modules/stermux/update.sh"
     "$PROJECT_ROOT/config/default.conf"
     "$TEST_ROOT/run_all.sh"
@@ -21,6 +22,7 @@ syntax_files=(
     "$TEST_ROOT/test_git.sh"
     "$TEST_ROOT/test_install.sh"
     "$TEST_ROOT/test_self_update.sh"
+    "$TEST_ROOT/test_extensions.sh"
     "$TEST_ROOT/test_manager.sh"
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"
@@ -42,6 +44,7 @@ test_files=(
     "$TEST_ROOT/test_git.sh"
     "$TEST_ROOT/test_install.sh"
     "$TEST_ROOT/test_self_update.sh"
+    "$TEST_ROOT/test_extensions.sh"
     "$TEST_ROOT/test_version.sh"
     "$TEST_ROOT/test_manager.sh"
 )

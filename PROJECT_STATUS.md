@@ -6,13 +6,13 @@
 
 ## 当前状态
 
-当前阶段：Phase 2.6
+当前阶段：Phase 3
 
-阶段名称：STermux 自更新
+阶段名称：第三方扩展更新
 
-状态：Phase 2.6 本地测试通过，待 Android Termux 实机验证
+状态：Phase 3 本地实现与隔离自动测试通过，待 Android Termux 实机验证
 
-最后更新：2026-07-16（Phase 2.6 自更新实现完成；完整本地自动测试 8/8 通过）
+最后更新：2026-07-16（Phase 3 本地实现完成；完整自动测试 9/9 通过）
 
 ---
 
@@ -23,8 +23,8 @@
 | Phase 1 | 基础骨架         | UI 修复待复测 |
 | Phase 2 | SillyTavern 更新 | 已完成 |
 | Phase 2.5 | SillyTavern 安装与首次配置 | 已完成 |
-| Phase 2.6 | STermux 自更新 | 本地通过，待实机验证 |
-| Phase 3 | 第三方扩展更新   | 未开始 |
+| Phase 2.6 | STermux 自更新 | 已完成 |
+| Phase 3 | 第三方扩展更新   | 本地通过，待实机验证 |
 | Phase 4 | 备份核心         | 未开始 |
 | Phase 5 | 定时备份         | 未开始 |
 | Phase 6 | 版本回退         | 未开始 |
@@ -80,20 +80,22 @@
 
 ## 当前开发中功能
 
-暂无。Phase 2.6 代码与本地测试已完成，等待 Android Termux 实机验证。
+暂无。Phase 3 代码与本地测试已完成，等待 Android Termux 实机验证。
 
 ---
 
 ## 待验证功能
 
 - Phase 1 终端主菜单社区标题边框的 Android Termux 目视复测
-- Phase 2.6 STermux 自更新的 Android Termux 实机验证
+- Phase 3 第三方扩展管理的 Android Termux 实机验证
 
 ---
 
 ## 已知问题
 
 暂无已知未修复问题。
+
+范围说明：Phase 3 按计划只管理 `public/scripts/extensions/third-party` 中为所有用户安装的扩展；新版 SillyTavern 的按用户扩展目录不在本阶段范围内。
 
 ---
 
@@ -143,6 +145,17 @@
 - 更新成功后通过 `exec bash manager.sh` 重新加载最新版程序，并覆盖重启失败状态。
 - 新增 `tests/test_self_update.sh`，全部使用临时本地 Git 仓库和重启 Mock，不操作真实项目仓库。
 - 完整本地自动测试由 7 项增加到 8 项，结果 8/8 通过。
+- Phase 2.6 Android Termux 实机验收通过：成功发现 upstream 新 Commit、正确显示可用更新，并完成真实 fast-forward 自更新。
+- Phase 2.6 保留本地修改、分叉、无 upstream、detached HEAD、fetch/pull 失败及重启失败的隔离自动测试覆盖。
+- 新增 `modules/sillytavern/extensions.sh`，集中提供全局 third-party 扩展路径、一级目录扫描、Git 状态和更新流程。
+- 扩展列表区分最新、可更新、仅手动可更新、非 Git、无 upstream、fetch 失败及更新失败。
+- 支持单个更新、多选更新、批量更新、重新检测、策略查看、设置及取消“仅手动更新”。
+- 多选支持空格或逗号分隔，自动过滤非法编号并去重，执行前展示最终选择并确认。
+- 批量更新逐项处理；单个 pull 失败不会中断后续扩展，仅手动扩展和非 Git 扩展不会参与自动批量更新。
+- `config/extension-policy.conf` 使用纯文本解析而非 `source`；默认策略为 `auto`，仅记录 `manual` 项。
+- 扩展更新结果写入 `data/logs/extension-update.log`，记录扩展名、前后 Commit、结果和错误摘要。
+- STermux 自更新的程序修改检查已排除扩展策略文件，并通过回归测试确认策略内容不会被自更新覆盖。
+- 新增 `tests/test_extensions.sh`，全部使用临时扩展目录和本地裸 Git 仓库；完整自动测试由 8 项增加到 9 项，结果 9/9 通过。
 
 ---
 
@@ -203,22 +216,41 @@
 
 | 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
 | ---- | -------- | ------------------- | ----------- | ---- |
-| Bash 语法 | 通过 | 未执行（当前无 WSL Linux 发行版） | 待测试 | 待实机验证 |
-| 独立菜单、普通摘要与技术详情 | 集成测试通过 | 未执行 | 待测试 | 本地通过 |
-| 最新状态与远程新 Commit | 临时本地 Git 仓库通过 | 未执行 | 待测试 | 本地通过 |
-| `pull --ff-only` 更新成功 | 临时本地 Git 仓库通过 | 未执行 | 待测试 | 本地通过 |
-| 运行时 `config/user.conf` 保留 | tracked Fixture 更新前后内容一致 | 未执行 | 待测试 | 本地通过 |
-| tracked 程序修改拒绝更新 | 通过，HEAD 保持不变 | 未执行 | 待测试 | 本地通过 |
-| 本地领先与分叉拒绝更新 | 通过 | 未执行 | 待测试 | 本地通过 |
-| 无 upstream 与 detached HEAD | 通过 | 未执行 | 待测试 | 本地通过 |
-| Git 损坏、非仓库、fetch 与 pull 失败 | 通过 | 未执行 | 待测试 | 本地通过 |
-| 更新后重启与重启失败 | 重启 Mock 通过 | 未执行 | 待测试 | 本地通过 |
+| Bash 语法 | 通过 | 未执行（当前无 WSL Linux 发行版） | 核心链路通过 | 已完成 |
+| 独立菜单、普通摘要与技术详情 | 集成测试通过 | 未执行 | 通过 | 已完成 |
+| 最新状态与远程新 Commit | 临时本地 Git 仓库通过 | 未执行 | 通过 | 已完成 |
+| `pull --ff-only` 更新成功 | 临时本地 Git 仓库通过 | 未执行 | 通过 | 已完成 |
+| 运行时 `config/user.conf` 保留 | tracked Fixture 更新前后内容一致 | 未执行 | 自动测试覆盖 | 已完成 |
+| tracked 程序修改拒绝更新 | 通过，HEAD 保持不变 | 未执行 | 自动测试覆盖 | 已完成 |
+| 本地领先与分叉拒绝更新 | 通过 | 未执行 | 自动测试覆盖 | 已完成 |
+| 无 upstream 与 detached HEAD | 通过 | 未执行 | 自动测试覆盖 | 已完成 |
+| Git 损坏、非仓库、fetch 与 pull 失败 | 通过 | 未执行 | 自动测试覆盖 | 已完成 |
+| 更新后重启与重启失败 | 重启 Mock 通过 | 未执行 | 自动测试覆盖 | 已完成 |
+
+---
+
+## Phase 3 测试矩阵
+
+| 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
+| ---- | -------- | ------------------- | ----------- | ---- |
+| Bash 语法 | 通过 | Git Bash 通过 | 待测试 | 待实机验证 |
+| 全局 third-party 一级目录扫描 | Git/非 Git/空目录 Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 中文、空格扩展路径 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| latest、可更新与仅手动可更新状态 | 本地裸 Git 远程通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 无 upstream 与 fetch 失败 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 单个与多选更新 | 非法编号过滤、逗号/空格和去重通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 批量跳过仅手动与非 Git 扩展 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 单项 pull 失败继续后续扩展 | 模拟 pull 失败后后续真实本地更新通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 用户主动更新仅手动扩展 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 策略保存、取消与内容保留 | 临时策略文件通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 扩展更新日志 | 成功、失败、跳过记录通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 真实用户配置与扩展隔离 | 管理器 Fixture 与临时根目录通过 | Git Bash 通过 | 不适用 | 本地通过 |
 
 ---
 
 ## 下一步
 
-在 Android Termux 真实仓库执行 Phase 2.6 STermux 自更新与自动重启验收；验收通过前不进入 Phase 3。
+在 Android Termux 对真实全局 third-party 扩展执行扫描、状态检查、选择性更新、批量跳过和失败隔离验收；验收通过前 Phase 3 不标记为完成，也不进入 Phase 4。
 
 ---
 
@@ -229,3 +261,5 @@
 2026-07-16：Phase 2 更新中心、语义版本展示、技术详情、更新历史及测试隔离通过 Android Termux 实机验收。
 
 2026-07-16：Phase 2.5 在纯净 Android Termux 完成依赖安装、完整 clone、路径保存和首次启动验收。
+
+2026-07-16：Phase 2.6 在 Android Termux 成功检测 upstream 新 Commit、显示可用更新并完成 fast-forward 自更新，阶段验收通过。

@@ -38,6 +38,7 @@ create_isolated_project() {
     cp -- \
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$target/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$target/modules/stermux/update.sh" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$target/config/default.conf" || return 1
@@ -45,6 +46,8 @@ create_isolated_project() {
     # 测试用户配置必须由测试自身创建，严禁复制项目真实 config/user.conf。
     printf '%s\n' '# Isolated test user configuration. Do not copy production user.conf.' \
         > "$target/config/user.conf" || return 1
+    printf '%s\n' '# Isolated extension policy. Do not copy production policy.' \
+        > "$target/config/extension-policy.conf" || return 1
 }
 
 create_fake_sillytavern() {
@@ -80,12 +83,15 @@ run_user_config_isolation_regression() {
     cp -- \
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$poison_source/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$poison_source/modules/stermux/update.sh" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$poison_source/config/default.conf" || return 1
 
     printf -v quoted_forbidden_path '%q' "$forbidden_install"
     printf 'ST_PATH=%s\n' "$quoted_forbidden_path" > "$poison_source/config/user.conf" || return 1
+    printf '%s\n' '# Poison isolation policy fixture.' \
+        > "$poison_source/config/extension-policy.conf" || return 1
 
     printf -v quoted_marker_path '%q' "$forbidden_marker"
     create_fake_sillytavern "$forbidden_install" \
@@ -147,6 +153,13 @@ self_update_status=$?
 [[ "$self_update_output" == *"STermux 更新"* ]] || fail "主菜单未进入 STermux 更新页面"
 [[ "$self_update_output" == *"当前版本：开发版"* ]] || fail "STermux 更新页面缺少开发版显示"
 [[ "$self_update_output" == *"STermux 更新技术详情"* ]] || fail "STermux 更新页面缺少技术详情"
+
+extension_menu_output="$(printf '4\n7\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+extension_menu_status=$?
+(( extension_menu_status == 0 )) || fail "第三方扩展菜单返回退出码 $extension_menu_status"
+[[ "$extension_menu_output" == *"第三方扩展"* ]] || fail "主菜单未进入第三方扩展管理"
+[[ "$extension_menu_output" == *"4. 更新全部允许自动更新的扩展"* ]] || fail "扩展菜单缺少批量更新入口"
+[[ "$extension_menu_output" == *"第三方扩展更新策略"* ]] || fail "扩展菜单缺少策略查看入口"
 
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"
