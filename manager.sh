@@ -9,24 +9,26 @@ STERMUX_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" ||
 }
 readonly STERMUX_ROOT
 
-load_core_file() {
+load_script_file() {
     local file="$1"
 
     if [[ ! -r "$file" ]]; then
-        printf '无法读取核心文件：%s\n' "$file" >&2
+        printf '无法读取脚本文件：%s\n' "$file" >&2
         exit 1
     fi
 
     # shellcheck source=/dev/null
     if ! source "$file"; then
-        printf '核心文件加载失败：%s\n' "$file" >&2
+        printf '脚本文件加载失败：%s\n' "$file" >&2
         exit 1
     fi
 }
 
-load_core_file "$STERMUX_ROOT/core/utils.sh"
-load_core_file "$STERMUX_ROOT/core/config.sh"
-load_core_file "$STERMUX_ROOT/core/ui.sh"
+load_script_file "$STERMUX_ROOT/core/utils.sh"
+load_script_file "$STERMUX_ROOT/core/config.sh"
+load_script_file "$STERMUX_ROOT/core/ui.sh"
+load_script_file "$STERMUX_ROOT/core/git.sh"
+load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
 
 set_sillytavern_path() {
     local candidate="$1"
@@ -134,6 +136,17 @@ launch_sillytavern() {
     return 0
 }
 
+open_sillytavern_update_center() {
+    if ! sillytavern_path_is_valid "${ST_PATH:-}"; then
+        ui_warning "当前 SillyTavern 路径无效，需要重新设置。"
+        if ! detect_sillytavern_path; then
+            return 1
+        fi
+    fi
+
+    sillytavern_update_menu
+}
+
 show_main_menu() {
     local installation_status
 
@@ -165,6 +178,9 @@ main_loop() {
                 ui_pause
                 ;;
             2)
+                open_sillytavern_update_center || true
+                ;;
+            6)
                 prompt_for_sillytavern_path || true
                 ui_pause
                 ;;
@@ -173,7 +189,7 @@ main_loop() {
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0、1 或 2。"
+                ui_warning "无效选项，请输入 0、1、2 或 6。"
                 ui_pause
                 ;;
         esac

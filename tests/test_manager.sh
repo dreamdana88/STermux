@@ -27,9 +27,10 @@ isolated_project="$TEST_TMP_ROOT/project"
 test_home="$TEST_TMP_ROOT/home"
 fake_install="$test_home/SillyTavern"
 
-mkdir -p -- "$isolated_project/core" "$isolated_project/config" "$fake_install" || exit 1
+mkdir -p -- "$isolated_project/core" "$isolated_project/config" "$isolated_project/modules/sillytavern" "$fake_install" || exit 1
 cp -- "$PROJECT_ROOT/manager.sh" "$isolated_project/manager.sh" || exit 1
-cp -- "$PROJECT_ROOT/core/config.sh" "$PROJECT_ROOT/core/ui.sh" "$PROJECT_ROOT/core/utils.sh" "$isolated_project/core/" || exit 1
+cp -- "$PROJECT_ROOT/core/config.sh" "$PROJECT_ROOT/core/git.sh" "$PROJECT_ROOT/core/ui.sh" "$PROJECT_ROOT/core/utils.sh" "$isolated_project/core/" || exit 1
+cp -- "$PROJECT_ROOT/modules/sillytavern/update.sh" "$isolated_project/modules/sillytavern/update.sh" || exit 1
 cp -- "$PROJECT_ROOT/config/default.conf" "$PROJECT_ROOT/config/user.conf" "$isolated_project/config/" || exit 1
 printf '%s\n' 'ST_PATH="$HOME/ConfiguredMissing"' > "$isolated_project/config/default.conf"
 
@@ -47,10 +48,16 @@ source "$isolated_project/config/user.conf"
 [[ -d "$ST_PATH" ]] || fail "自动发现的路径未正确保存"
 [[ "$ST_PATH" == */home/SillyTavern ]] || fail "保存了意外的安装路径"
 
+update_menu_output="$(printf '2\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+update_menu_status=$?
+(( update_menu_status == 0 )) || fail "更新中心菜单返回退出码 $update_menu_status"
+[[ "$update_menu_output" == *"Upstream"* ]] || fail "主菜单未进入更新中心"
+
 empty_project="$TEST_TMP_ROOT/empty-project"
-mkdir -p -- "$empty_project/core" "$empty_project/config" || exit 1
+mkdir -p -- "$empty_project/core" "$empty_project/config" "$empty_project/modules/sillytavern" || exit 1
 cp -- "$PROJECT_ROOT/manager.sh" "$empty_project/manager.sh" || exit 1
-cp -- "$PROJECT_ROOT/core/config.sh" "$PROJECT_ROOT/core/ui.sh" "$PROJECT_ROOT/core/utils.sh" "$empty_project/core/" || exit 1
+cp -- "$PROJECT_ROOT/core/config.sh" "$PROJECT_ROOT/core/git.sh" "$PROJECT_ROOT/core/ui.sh" "$PROJECT_ROOT/core/utils.sh" "$empty_project/core/" || exit 1
+cp -- "$PROJECT_ROOT/modules/sillytavern/update.sh" "$empty_project/modules/sillytavern/update.sh" || exit 1
 cp -- "$PROJECT_ROOT/config/default.conf" "$PROJECT_ROOT/config/user.conf" "$empty_project/config/" || exit 1
 
 empty_output="$(printf '\n0\n' | HOME="$TEST_TMP_ROOT/no-install-home" bash "$empty_project/manager.sh" 2>&1)"

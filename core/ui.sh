@@ -51,10 +51,11 @@ ui_main_menu() {
     ui_clear
     printf '%s\n' '╔══════════════════════════════════╗'
     printf '%s\n' '║              STermux             ║'
-    printf '%s\n' '║      仅发布在外神们茶话会社区      ║'
+    printf '%s\n' '║     仅发布在外神们茶话会社区     ║'
     printf '%s\n' '╠══════════════════════════════════╣'
     printf '%s\n' '║ 1. 启动 SillyTavern              ║'
-    printf '%s\n' '║ 2. 设置 SillyTavern 路径         ║'
+    printf '%s\n' '║ 2. 更新中心                      ║'
+    printf '%s\n' '║ 6. 设置 SillyTavern 路径         ║'
     printf '%s\n' '║ 0. 退出                          ║'
     printf '%s\n' '╚══════════════════════════════════╝'
     printf '\nSillyTavern：%s\n\n' "$installation_status"
