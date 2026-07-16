@@ -27,6 +27,7 @@ load_script_file() {
 load_script_file "$STERMUX_ROOT/core/utils.sh"
 load_script_file "$STERMUX_ROOT/core/config.sh"
 load_script_file "$STERMUX_ROOT/core/ui.sh"
+load_script_file "$STERMUX_ROOT/core/autostart.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
 load_script_file "$STERMUX_ROOT/core/backup.sh"
 load_script_file "$STERMUX_ROOT/modules/stermux/update.sh"
@@ -185,6 +186,72 @@ open_backup_center() {
     backup_menu
 }
 
+settings_confirm_autostart_change() {
+    local action="$1"
+    local confirm
+
+    printf '确认%s打开 Termux 时自动进入 STermux？[y/N] ' "$action"
+    IFS= read -r confirm || return 1
+    [[ "$confirm" == y || "$confirm" == Y ]]
+}
+
+settings_menu() {
+    local choice
+
+    while true; do
+        ui_clear
+        printf '\n设置\n\n'
+        printf '自动进入 STermux：%s\n\n' "$(autostart_status_text)"
+        printf '1. 设置 SillyTavern 路径\n'
+        printf '2. 开启自动进入\n'
+        printf '3. 关闭自动进入\n'
+        printf '0. 返回主菜单\n\n'
+        printf '请选择操作：'
+        IFS= read -r choice || return 0
+        case "$choice" in
+            1)
+                prompt_for_sillytavern_path || true
+                ui_pause
+                ;;
+            2)
+                if settings_confirm_autostart_change "开启"; then
+                    if autostart_enable; then
+                        ui_success "已开启自动进入 STermux。"
+                        [[ -n "$AUTOSTART_LAST_BACKUP" ]] \
+                            && ui_info "原 Shell 配置已备份：$AUTOSTART_LAST_BACKUP"
+                    else
+                        ui_error "$AUTOSTART_LAST_ERROR"
+                    fi
+                else
+                    ui_info "已取消开启。"
+                fi
+                ui_pause
+                ;;
+            3)
+                if settings_confirm_autostart_change "关闭"; then
+                    if autostart_disable; then
+                        ui_success "已关闭自动进入 STermux。"
+                        [[ -n "$AUTOSTART_LAST_BACKUP" ]] \
+                            && ui_info "原 Shell 配置已备份：$AUTOSTART_LAST_BACKUP"
+                    else
+                        ui_error "$AUTOSTART_LAST_ERROR"
+                    fi
+                else
+                    ui_info "已取消关闭。"
+                fi
+                ui_pause
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                ui_warning "无效选项，请输入 0 到 3。"
+                ui_pause
+                ;;
+        esac
+    done
+}
+
 show_main_menu() {
     local installation_status
 
@@ -230,8 +297,7 @@ main_loop() {
                     open_backup_center || true
                     ;;
                 6)
-                    prompt_for_sillytavern_path || true
-                    ui_pause
+                    settings_menu
                     ;;
                 0)
                     ui_info "已退出 STermux。"
@@ -256,12 +322,15 @@ main_loop() {
                 3)
                     open_stermux_update_center || true
                     ;;
+                4)
+                    settings_menu
+                    ;;
                 0)
                     ui_info "已退出 STermux。"
                     return 0
                     ;;
                 *)
-                    ui_warning "无效选项，请输入 0、1、2 或 3。"
+                    ui_warning "无效选项，请输入 0、1、2、3 或 4。"
                     ui_pause
                     ;;
             esac

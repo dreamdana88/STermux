@@ -402,7 +402,7 @@ AUTOMATIC_BACKUP_KEEP=2
 CHECK_ST_UPDATE_ON_START=false
 CHECK_EXTENSION_UPDATE_ON_START=false
 
-AUTO_ENTER_MANAGER=true
+AUTO_ENTER_MANAGER=false
 
 GITHUB_PROXY=""
 ```
@@ -1380,26 +1380,43 @@ GITHUB_PROXY=""
 
 # 32. Termux 自动进入 STermux
 
-支持：
+本功能归入 Phase 8 的安装与发布、首次配置和 Shell 入口管理范围。可以作为独立子功能提前实现，但不得因此改变尚在实机验收中的其他 Phase 状态，也不得提前宣称 Phase 8 完成。
+
+默认关闭。用户可以在 STermux 设置中：
 
 ```text
-启用
-关闭
+查看当前状态
+开启自动进入
+关闭自动进入
 ```
 
-修改 Shell 启动文件前必须备份。
+第一版至少支持 Bash。应检测当前 `SHELL`；可以评估 Zsh 支持，但对尚未支持的 Shell 必须明确提示并拒绝修改任何配置文件。
+
+修改 Shell 启动文件前必须备份。不得覆盖用户原有文件；所有写入和删除仅限 STermux 托管区域。
 
 写入内容需要明确标记：
 
 ```bash
-# >>> STermux >>>
+# >>> STermux autostart >>>
 ...
-# <<< STermux <<<
+# <<< STermux autostart <<<
 ```
 
-关闭功能时只移除标记范围内的 STermux 内容。
+重复开启只能更新现有托管区域，不得产生重复代码。关闭功能时只移除完整托管区域；重复关闭应安全成功。
 
 不得破坏用户其他 `.bashrc` 或 `.zshrc` 配置。
+
+自动启动代码必须：
+
+```text
+只在交互式 Shell 中运行
+通过环境标记防止递归启动和无限循环
+根据 STermux 实际安装目录生成 manager.sh 路径
+仅在 manager.sh 仍然存在时启动
+用户从主菜单退出后返回原 Termux Shell
+```
+
+自动测试必须使用临时 `HOME` 和临时 Shell 配置文件，不得读取或修改开发机及用户真实的 `~/.bashrc`、`~/.zshrc`。至少覆盖开启、重复开启、关闭、重复关闭、原配置保留、特殊字符安装路径、manager.sh 不存在和防递归逻辑。
 
 ---
 
@@ -2183,6 +2200,7 @@ install.sh
 uninstall.sh
 首次配置
 自动进入 Termux
+自动进入设置、Bash 托管区域与防递归测试
 README
 完整错误处理
 基础测试文档

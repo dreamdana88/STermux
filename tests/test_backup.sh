@@ -70,6 +70,11 @@ ui_initialize
 backup_current_epoch() { printf '%s\n' "$TEST_BACKUP_EPOCH"; }
 backup_current_display_time() { printf 'test-time-%s\n' "$TEST_BACKUP_EPOCH"; }
 
+[[ "$(backup_type_display manual)" == "手动备份" ]] || fail "manual 中文显示错误"
+[[ "$(backup_type_display protective)" == "保护备份" ]] || fail "protective 中文显示错误"
+[[ "$(backup_type_display scheduled)" == "计划备份" ]] || fail "scheduled 中文显示错误"
+[[ "$(backup_type_display catchup)" == "补做备份" ]] || fail "catchup 中文显示错误"
+
 create_backup_at 100 manual "manual fixture" || fail "无法创建 manual 备份：$BACKUP_LAST_ERROR"
 MANUAL_PATH="$BACKUP_LAST_PATH"
 MANUAL_ID="$(basename -- "$MANUAL_PATH")"
@@ -107,7 +112,8 @@ if backup_delete_path "$MANUAL_PATH" automatic; then fail "自动清理路径允
 [[ -d "$MANUAL_PATH" ]] || fail "manual 被自动清理接口删除"
 
 list_output="$(backup_show_list 2>&1)"
-[[ "$list_output" == *"test-time-400 | catchup"* ]] || fail "列表缺少创建时间或 catchup 类型"
+[[ "$list_output" == *"test-time-400 | 补做备份"* ]] || fail "列表缺少创建时间或补做备份类型"
+[[ "$list_output" == *"手动备份"* ]] || fail "用户界面未将 manual 显示为手动备份"
 [[ "$list_output" == *"$MANUAL_ID"* ]] || fail "列表缺少 manual 唯一标识"
 [[ "$list_output" == *" B |"* || "$list_output" == *" KiB |"* || "$list_output" == *" MiB |"* ]] \
     || fail "列表缺少文件大小"

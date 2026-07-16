@@ -31,6 +31,7 @@ create_isolated_project() {
     cp -- "$PROJECT_ROOT/manager.sh" "$target/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
+        "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
@@ -80,6 +81,7 @@ run_user_config_isolation_regression() {
     cp -- "$PROJECT_ROOT/manager.sh" "$poison_source/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
+        "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
@@ -172,9 +174,29 @@ backup_menu_status=$?
 (( backup_menu_status == 0 )) || fail "备份菜单返回退出码 $backup_menu_status"
 [[ "$backup_menu_output" == *"备份与恢复"* ]] || fail "主菜单未进入备份与恢复页面"
 [[ "$backup_menu_output" == *"手动备份创建成功"* ]] || fail "管理器未能创建隔离 manual 备份"
-[[ "$backup_menu_output" == *"manual"* ]] || fail "备份列表未显示 manual 类型"
+[[ "$backup_menu_output" == *"手动备份"* ]] || fail "备份列表未使用中文手动备份类型"
 find "$isolated_project/backups/sillytavern" -mindepth 1 -maxdepth 1 -type d | grep -q . \
     || fail "隔离管理器没有生成备份目录"
+
+settings_output="$(printf '6\n0\n0\n' | HOME="$test_home" SHELL=/bin/bash bash "$isolated_project/manager.sh" 2>&1)"
+settings_status=$?
+(( settings_status == 0 )) || fail "设置菜单返回退出码 $settings_status"
+[[ "$settings_output" == *"自动进入 STermux：已关闭（Bash）"* ]] || fail "设置菜单未显示自动进入状态"
+[[ "$settings_output" == *"2. 开启自动进入"* ]] || fail "设置菜单缺少开启入口"
+
+settings_enable_output="$(printf '6\n2\ny\n\n0\n0\n' | HOME="$test_home" SHELL=/bin/bash bash "$isolated_project/manager.sh" 2>&1)"
+settings_enable_status=$?
+(( settings_enable_status == 0 )) || fail "设置菜单开启自动进入失败"
+[[ "$settings_enable_output" == *"已开启自动进入 STermux"* ]] || fail "设置菜单缺少开启成功提示"
+grep -Fq '# >>> STermux autostart >>>' "$test_home/.bashrc" || fail "设置菜单未写入自动进入托管区域"
+
+settings_disable_output="$(printf '6\n3\ny\n\n0\n0\n' | HOME="$test_home" SHELL=/bin/bash bash "$isolated_project/manager.sh" 2>&1)"
+settings_disable_status=$?
+(( settings_disable_status == 0 )) || fail "设置菜单关闭自动进入失败"
+[[ "$settings_disable_output" == *"已关闭自动进入 STermux"* ]] || fail "设置菜单缺少关闭成功提示"
+if grep -Fq '# >>> STermux autostart >>>' "$test_home/.bashrc"; then
+    fail "设置菜单关闭后仍保留自动进入托管区域"
+fi
 
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"

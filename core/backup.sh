@@ -56,6 +56,16 @@ backup_type_is_automatic() {
     case "$1" in protective|scheduled|catchup) return 0 ;; *) return 1 ;; esac
 }
 
+backup_type_display() {
+    case "$1" in
+        manual) printf '%s\n' "手动备份" ;;
+        protective) printf '%s\n' "保护备份" ;;
+        scheduled) printf '%s\n' "计划备份" ;;
+        catchup) printf '%s\n' "补做备份" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 backup_metadata_get() {
     local file="$1"
     local key="$2"
@@ -227,7 +237,7 @@ backup_create() {
     data_archive="$staging/backup.tar.gz"
     third_party_archive="$staging/third-party.tar.gz"
 
-    ui_info "正在创建 $type 备份..."
+    ui_info "正在创建$(backup_type_display "$type")..."
     if ! tar -C "$BACKUP_SOURCE_DATA_DIR" -czf "$data_archive" .; then
         BACKUP_LAST_ERROR="无法归档 SillyTavern data 目录"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
@@ -448,7 +458,8 @@ backup_show_list() {
     if (( ${#BACKUP_IDS[@]} == 0 )); then ui_info "暂无备份。"; return 0; fi
     for ((index = 0; index < ${#BACKUP_IDS[@]}; index++)); do
         printf '%d. %s | %s | %s | %s\n' "$((index + 1))" "${BACKUP_TIMES[index]}" \
-            "${BACKUP_TYPES[index]}" "$(backup_size_display "${BACKUP_SIZES[index]}")" "${BACKUP_IDS[index]}"
+            "$(backup_type_display "${BACKUP_TYPES[index]}")" \
+            "$(backup_size_display "${BACKUP_SIZES[index]}")" "${BACKUP_IDS[index]}"
     done
 }
 
@@ -495,7 +506,8 @@ backup_delete_interactive() {
     if [[ "$multiple" != true && ${#BACKUP_SELECTED_INDEXES[@]} -ne 1 ]]; then ui_warning "只能选择一个备份。"; return 1; fi
     printf '\n即将删除：\n'
     for index in "${BACKUP_SELECTED_INDEXES[@]}"; do
-        printf -- '- %s | %s | %s\n' "${BACKUP_TIMES[index]}" "${BACKUP_TYPES[index]}" "${BACKUP_IDS[index]}"
+        printf -- '- %s | %s | %s\n' "${BACKUP_TIMES[index]}" \
+            "$(backup_type_display "${BACKUP_TYPES[index]}")" "${BACKUP_IDS[index]}"
     done
     printf '确认删除以上备份？[y/N] '
     IFS= read -r confirm || return 1
@@ -761,8 +773,9 @@ backup_restore_interactive() {
     backup_parse_selection "$input" || { ui_warning "没有有效的备份编号。"; return 1; }
     [[ ${#BACKUP_SELECTED_INDEXES[@]} -eq 1 ]] || { ui_warning "恢复只能选择一个备份。"; return 1; }
     index="${BACKUP_SELECTED_INDEXES[0]}"
-    printf '将恢复：%s | %s | %s\n' "${BACKUP_TIMES[index]}" "${BACKUP_TYPES[index]}" "${BACKUP_IDS[index]}"
-    ui_warning "恢复前会先创建 protective 备份。"
+    printf '将恢复：%s | %s | %s\n' "${BACKUP_TIMES[index]}" \
+        "$(backup_type_display "${BACKUP_TYPES[index]}")" "${BACKUP_IDS[index]}"
+    ui_warning "恢复前会先创建保护备份。"
     printf '确认恢复？[y/N] '; IFS= read -r confirm || return 1
     [[ "$confirm" == y || "$confirm" == Y ]] || { ui_info "已取消恢复。"; return 0; }
     backup_restore_path "${BACKUP_PATHS[index]}"
@@ -778,7 +791,7 @@ backup_menu() {
     local choice
     while true; do
         ui_clear
-        printf '\n备份与恢复\n\n1. 创建 manual 备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n0. 返回主菜单\n\n请选择操作：'
+        printf '\n备份与恢复\n\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n0. 返回主菜单\n\n请选择操作：'
         IFS= read -r choice || return 0
         case "$choice" in
             1) if backup_create manual "user-request"; then ui_success "手动备份创建成功：$(basename -- "$BACKUP_LAST_PATH")"; else ui_error "$BACKUP_LAST_ERROR"; fi; ui_pause ;;

@@ -9,6 +9,7 @@ PROJECT_ROOT="$(CDPATH= cd -- "$TEST_ROOT/.." && pwd -P)" || exit 1
 syntax_files=(
     "$PROJECT_ROOT/manager.sh"
     "$PROJECT_ROOT/core/config.sh"
+    "$PROJECT_ROOT/core/autostart.sh"
     "$PROJECT_ROOT/core/backup.sh"
     "$PROJECT_ROOT/core/git.sh"
     "$PROJECT_ROOT/core/ui.sh"
@@ -21,6 +22,7 @@ syntax_files=(
     "$PROJECT_ROOT/config/default.conf"
     "$TEST_ROOT/run_all.sh"
     "$TEST_ROOT/test_config.sh"
+    "$TEST_ROOT/test_autostart.sh"
     "$TEST_ROOT/test_backup.sh"
     "$TEST_ROOT/test_git.sh"
     "$TEST_ROOT/test_install.sh"
@@ -42,6 +44,7 @@ printf '%s\n\n' '语法检查通过。'
 
 test_files=(
     "$TEST_ROOT/test_config.sh"
+    "$TEST_ROOT/test_autostart.sh"
     "$TEST_ROOT/test_backup.sh"
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"

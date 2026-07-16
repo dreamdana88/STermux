@@ -58,7 +58,7 @@ ui_main_menu() {
     printf '%s\n' '║ 3. STermux 更新                  ║'
     printf '%s\n' '║ 4. 第三方扩展管理                ║'
     printf '%s\n' '║ 5. 备份与恢复                    ║'
-    printf '%s\n' '║ 6. 设置 SillyTavern 路径         ║'
+    printf '%s\n' '║ 6. 设置                          ║'
     printf '%s\n' '║ 0. 退出                          ║'
     printf '%s\n' '╚══════════════════════════════════╝'
     printf '\nSillyTavern：%s\n\n' "$installation_status"
@@ -73,6 +73,7 @@ ui_uninstalled_menu() {
     printf '%s\n' '║ 1. 安装 SillyTavern              ║'
     printf '%s\n' '║ 2. 设置已有 SillyTavern 路径     ║'
     printf '%s\n' '║ 3. STermux 更新                  ║'
+    printf '%s\n' '║ 4. 设置                          ║'
     printf '%s\n' '║ 0. 退出                          ║'
     printf '%s\n' '╚══════════════════════════════════╝'
     printf '\nSillyTavern：未安装\n\n'

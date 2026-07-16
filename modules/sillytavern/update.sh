@@ -463,7 +463,7 @@ sillytavern_update_confirm_and_execute() {
     fi
 
     if [[ "${AUTO_BACKUP_BEFORE_UPDATE:-false}" == true ]]; then
-        ui_info "更新前正在创建 protective 数据备份..."
+        ui_info "更新前正在创建保护备份..."
         if ! backup_create protective "before-sillytavern-update"; then
             ui_error "保护备份失败，已取消 SillyTavern 更新：$BACKUP_LAST_ERROR"
             return 1

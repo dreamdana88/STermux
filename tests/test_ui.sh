@@ -52,6 +52,7 @@ done <<< "$menu_output"
 [[ "$menu_output" == *'3. STermux 更新'* ]] || fail "已安装菜单缺少 STermux 更新入口"
 [[ "$menu_output" == *'4. 第三方扩展管理'* ]] || fail "已安装菜单缺少第三方扩展入口"
 [[ "$menu_output" == *'5. 备份与恢复'* ]] || fail "已安装菜单缺少备份与恢复入口"
+[[ "$menu_output" == *'6. 设置'* ]] || fail "已安装菜单缺少设置入口"
 
 uninstalled_output="$(ui_uninstalled_menu)"
 box_line_count=0
@@ -64,9 +65,10 @@ while IFS= read -r line; do
     box_line_count=$((box_line_count + 1))
 done <<< "$uninstalled_output"
 
-[[ "$box_line_count" == 6 ]] || fail "未安装菜单内容行数量异常：$box_line_count"
+[[ "$box_line_count" == 7 ]] || fail "未安装菜单内容行数量异常：$box_line_count"
 [[ "$uninstalled_output" == *'SillyTavern：未安装'* ]] || fail "未安装菜单缺少状态"
 [[ "$uninstalled_output" == *'1. 安装 SillyTavern'* ]] || fail "未安装菜单缺少安装入口"
 [[ "$uninstalled_output" == *'3. STermux 更新'* ]] || fail "未安装菜单缺少 STermux 更新入口"
+[[ "$uninstalled_output" == *'4. 设置'* ]] || fail "未安装菜单缺少设置入口"
 
 printf '%s\n' 'PASS: 中英文混排菜单边框宽度测试通过'

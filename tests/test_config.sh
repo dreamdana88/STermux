@@ -30,6 +30,8 @@ grep -Fxq 'BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"' "$PROJECT_ROOT/confi
     || fail "项目默认备份根目录配置缺失"
 grep -Fxq 'AUTO_BACKUP_BEFORE_UPDATE=true' "$PROJECT_ROOT/config/default.conf" \
     || fail "项目默认更新前保护备份未启用"
+grep -Fxq 'AUTO_ENTER_MANAGER=false' "$PROJECT_ROOT/config/default.conf" \
+    || fail "自动进入 STermux 默认值不是关闭"
 printf '%s\n' \
     'ST_PATH="$HOME/SillyTavern"' \
     'AUTOMATIC_BACKUP_KEEP=2' \

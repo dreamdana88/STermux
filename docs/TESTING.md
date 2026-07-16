@@ -559,6 +559,7 @@ Termux 实机测试：待验证
 15. 安装成功、失败、目录冲突和残留目录测试只能写入当前测试临时根目录。
 16. STermux 自更新测试不得修改真实项目仓库、访问 GitHub 或真实执行 `manager.sh` 重启，必须使用临时 Git 仓库和重启 Mock。
 17. 第三方扩展测试不得复制真实 `extension-policy.conf`，不得扫描或更新真实 SillyTavern 扩展；策略、扩展目录与 Git 远程必须全部由测试在临时根目录创建。
+18. 自动进入测试必须设置临时 `HOME`、临时 `.bashrc` 和临时 STermux 入口；不得读取、备份或修改开发机及用户真实的 `.bashrc`、`.zshrc`。
 
 ---
 
@@ -799,6 +800,19 @@ Termux 实机验证通过
 - 逾期补偿测试
 - 错过多个周期时只创建一份 catchup 测试
 - 定时备份的 Termux 实机验证
+
+### Phase 8：自动进入子功能
+
+- 临时 HOME 与临时 `.bashrc` 隔离
+- 默认关闭、开启、重复开启、关闭和重复关闭
+- 托管区域之外的用户配置完整保留
+- 修改前 Shell 配置备份
+- 特殊字符 STermux 安装路径
+- 仅交互式 Shell 自动执行
+- 环境标记防递归与退出后返回原 Shell
+- `manager.sh` 不存在时安全跳过
+- Zsh 或其他不支持 Shell 明确拒绝且不修改配置
+- Android Termux Bash 实机验证
 
 后续 Phase 在各自开始时继续扩展相应测试。
 

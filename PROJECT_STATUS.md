@@ -29,7 +29,7 @@
 | Phase 5 | 定时备份         | 未开始 |
 | Phase 6 | 版本回退         | 未开始 |
 | Phase 7 | 模块系统整理     | 未开始 |
-| Phase 8 | 安装与发布       | 未开始 |
+| Phase 8 | 安装与发布       | 未开始（自动进入子功能本地通过） |
 
 ---
 
@@ -88,6 +88,7 @@
 
 - Phase 1 终端主菜单社区标题边框的 Android Termux 目视复测
 - Phase 4 完成后的 Android Termux 真实备份与恢复验证
+- Phase 8 自动进入子功能的 Android Termux Bash 实机验证
 
 ---
 
@@ -169,12 +170,19 @@
 - `third-party/` 使用独立归档完整保存 Git 元数据、隐藏文件和普通文件；目录不存在时元数据与日志记录 `missing`，不会导致备份失败。
 - 新格式恢复会同步恢复整个 third-party 快照；备份时为 `missing` 则恢复为目录不存在，旧格式备份则保持当前扩展目录不变。
 - 备份验证升级为同时核对 data 与 third-party 归档可读性、各归档实际大小、总大小和元数据一致性。
-- 主菜单新增“备份与恢复”，支持列表、manual 创建、恢复、单个删除和安全多选批量删除。
+- 主菜单新增“备份与恢复”，支持列表、手动备份创建、恢复、单个删除和安全多选批量删除。
+- 备份用户界面统一显示“手动备份、保护备份、计划备份、补做备份”；内部和元数据继续使用 manual、protective、scheduled、catchup。
 - manual 永不参与自动轮换；protective、scheduled、catchup 共用自动池并只保留创建时间最新 2 份。
 - 删除操作只允许经过校验的备份根目录直属条目，自动删除显式拒绝 manual；批量删除单项失败不阻断后续项并写入日志。
 - 恢复前先验证归档成员并创建 protective 备份，当前数据通过同目录暂存与移动替换，失败时尝试回滚，不直接递归删除当前 `data`。
 - SillyTavern 本体更新在用户确认后先创建 protective 备份；保护备份失败会取消 Git 更新。
 - 新增 `tests/test_backup.sh`，全部使用临时 SillyTavern、备份根目录与更新 Mock；完整本地测试由 9 项增至 10 项，结果 10/10 通过。
+- Phase 8 的“自动进入 STermux”子功能提前独立实现，但 Phase 8 整体仍保持未开始，且不改变 Phase 4 待实机验收状态。
+- 主菜单新增设置页面，可查看、开启和关闭 Bash 自动进入；默认配置为 `AUTO_ENTER_MANAGER=false`。
+- 自动进入仅维护带有 `STermux autostart` 明确标记的 `.bashrc` 区域，修改前创建唯一备份，重复开启/关闭保持幂等。
+- 生成入口使用当前实际 `STERMUX_ROOT/manager.sh`，只在交互式 Shell、入口文件存在且未设置防递归环境标记时运行；退出后返回原 Shell。
+- 当前检测到 Zsh 或其他不支持 Shell 时只显示错误，不修改配置文件。
+- 新增 `tests/test_autostart.sh`，使用临时 HOME、临时 `.bashrc` 和特殊字符项目路径；完整本地测试增至 11 项，结果 11/11 通过。
 
 ---
 
@@ -290,13 +298,33 @@
 | 更新前 protective 联动 | 更新与失败路径 Mock 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 自定义 dataRoot 安全拒绝 | 通过，未写入成功备份 | Git Bash 通过 | 待测试 | 本地通过 |
 | 真实用户配置、数据与备份隔离 | 临时项目与独立 Fixture 通过 | Git Bash 通过 | 不适用 | 本地通过 |
-| 完整回归 | 10/10 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 用户界面中文备份类型 | 手动/保护/计划/补做显示通过，英文内部标识保持 | Git Bash 通过 | 待测试 | 本地通过 |
+| 完整回归 | 11/11 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+
+---
+
+## Phase 8 自动进入子功能测试矩阵
+
+| 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
+| ---- | -------- | ------------------- | ----------- | ---- |
+| 默认关闭与设置状态 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 开启与重复开启 | 单一托管区域、幂等通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 关闭与重复关闭 | 仅移除托管区域、幂等通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 用户原 `.bashrc` 保留与修改前备份 | 字节内容对比与备份文件通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 特殊字符 STermux 路径 | 实际启动 Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 交互式 Shell 限制 | 交互触发、非交互跳过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 防递归与退出后返回 Shell | 嵌套交互 Shell 仅启动一次，返回哨兵通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| manager.sh 不存在 | 安全跳过，Shell 正常退出 | Git Bash 通过 | 待测试 | 本地通过 |
+| Zsh/不支持 Shell | 明确拒绝且配置不变 | Git Bash 通过 | 待测试 | 本地通过 |
+| 真实 Shell 配置隔离 | 临时 HOME 与临时 `.bashrc` | Git Bash 通过 | 不适用 | 本地通过 |
+
+该矩阵只代表 Phase 8 自动进入子功能；安装器、卸载器、发布等 Phase 8 其余范围仍未开始。
 
 ---
 
 ## 下一步
 
-严格按 Phase 4 范围完成备份核心；本地验证通过后保持“待 Android Termux 实机验证”，不进入 Phase 5。
+继续完成 Phase 4 Android Termux 备份验收，并独立验证 Bash 自动进入子功能；不进入 Phase 5，也不提前展开 Phase 8 其他范围。
 
 ---
 
@@ -313,3 +341,5 @@
 2026-07-16：Phase 3 在 Android Termux 成功扫描 15 个 third-party 一级扩展，Git/非 Git 分类及 manual 策略设置、保存和取消均通过，阶段验收完成。
 
 2026-07-16：Phase 4 备份范围扩展至 data、config.yaml 和全局 third-party；Git/隐藏文件、目录缺失与同步恢复回归通过。Bash 语法及完整 10/10 回归通过，等待 Android Termux 实机验收。
+
+2026-07-16：备份界面类型完成中文化；Phase 8 自动进入子功能完成本地实现与隔离测试，完整回归 11/11 通过，Phase 4 状态保持待 Android Termux 实机验收。
