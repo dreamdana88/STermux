@@ -20,6 +20,7 @@ syntax_files=(
     "$TEST_ROOT/test_manager.sh"
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"
+    "$TEST_ROOT/test_version.sh"
 )
 
 printf '%s\n' '== Bash 语法检查 =='
@@ -35,6 +36,7 @@ test_files=(
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"
     "$TEST_ROOT/test_git.sh"
+    "$TEST_ROOT/test_version.sh"
     "$TEST_ROOT/test_manager.sh"
 )
 

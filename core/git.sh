@@ -46,6 +46,14 @@ git_short_commit() {
     git -C "$repository" rev-parse --short=12 HEAD 2>/dev/null
 }
 
+git_show_file_at_ref() {
+    local repository="$1"
+    local ref="$2"
+    local file="$3"
+
+    git -C "$repository" show "${ref}:${file}" 2>/dev/null
+}
+
 git_current_upstream() {
     local repository="$1"
 

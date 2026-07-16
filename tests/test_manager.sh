@@ -122,10 +122,12 @@ source "$isolated_project/config/user.conf"
 [[ -d "$ST_PATH" ]] || fail "自动发现的路径未正确保存"
 [[ "$ST_PATH" == */home/SillyTavern ]] || fail "保存了意外的安装路径"
 
-update_menu_output="$(printf '2\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+update_menu_output="$(printf '2\n4\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 update_menu_status=$?
 (( update_menu_status == 0 )) || fail "更新中心菜单返回退出码 $update_menu_status"
-[[ "$update_menu_output" == *"Upstream"* ]] || fail "主菜单未进入更新中心"
+[[ "$update_menu_output" == *"更新状态"* ]] || fail "主菜单未进入更新中心"
+[[ "$update_menu_output" == *"4. 查看技术详情"* ]] || fail "更新中心缺少技术详情入口"
+[[ "$update_menu_output" == *"Upstream"* ]] || fail "技术详情未显示 Upstream"
 
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"
