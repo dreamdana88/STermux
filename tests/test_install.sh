@@ -88,11 +88,15 @@ mock_bin="$TEST_TMP_ROOT/mock-bin"
 mkdir -p -- "$mock_bin"
 mock_installed_tool="$mock_bin/mock-installed-tool"
 mock_pkg_calls="$TEST_TMP_ROOT/pkg-calls.log"
-export MOCK_INSTALLED_TOOL="$mock_installed_tool" MOCK_PKG_CALLS="$mock_pkg_calls"
+MOCK_PKG_INSTALL_STATUS=0
+export MOCK_INSTALLED_TOOL="$mock_installed_tool" MOCK_PKG_CALLS="$mock_pkg_calls" MOCK_PKG_INSTALL_STATUS
 printf '%s\n' \
     '#!/usr/bin/env bash' \
     'if [[ "${1:-}" == "list-installed" ]]; then exit 0; fi' \
     'printf "%s\n" "$*" >> "$MOCK_PKG_CALLS"' \
+    'printf "%s\n" "MOCK PKG: Downloading packages" "MOCK PKG: Unpacking" "MOCK PKG: Setting up"' \
+    'if [[ "${1:-}" != "install" || "${2:-}" != "-y" ]]; then printf "missing automatic confirmation flag\\n" >&2; exit 64; fi' \
+    'if (( MOCK_PKG_INSTALL_STATUS != 0 )); then printf "MOCK PKG: installation failed\\n" >&2; exit "$MOCK_PKG_INSTALL_STATUS"; fi' \
     'printf "%s\n" "#!/usr/bin/env bash" "printf '\''mock-installed 1.0.0\\n'\''" > "$MOCK_INSTALLED_TOOL"' \
     'chmod +x "$MOCK_INSTALLED_TOOL"' \
     'exit 0' \
@@ -106,8 +110,27 @@ ST_INSTALL_DEPENDENCY_PACKAGES=(mock-package)
 ST_INSTALL_DEPENDENCY_ARGUMENTS=(--version)
 sillytavern_install_check_dependencies >/dev/null 2>&1 || true
 [[ "${ST_INSTALL_MISSING_PACKAGES[*]}" == "mock-package" ]] || fail "Mock 缺失依赖未被识别"
-sillytavern_install_missing_dependencies >/dev/null 2>&1 || fail "Mock 缺失依赖安装及复验失败"
-grep -Fq 'install mock-package' "$mock_pkg_calls" || fail "未通过 pkg 安装缺失软件包"
+pkg_output_file="$TEST_TMP_ROOT/pkg-output.log"
+sillytavern_install_missing_dependencies > "$pkg_output_file" 2>&1 \
+    || fail "Mock 缺失依赖安装及复验失败"
+grep -Fq 'install -y mock-package' "$mock_pkg_calls" || fail "用户确认后 pkg 未使用自动确认参数"
+grep -Fq 'MOCK PKG: Downloading packages' "$pkg_output_file" || fail "pkg 正常安装输出被吞掉"
+sillytavern_dependency_probe mock-installed-tool --version || fail "pkg 安装成功后未重新验证依赖"
+
+rm -f -- "$mock_installed_tool"
+ST_INSTALL_DEPENDENCY_COMMANDS=(mock-failed-tool)
+ST_INSTALL_DEPENDENCY_PACKAGES=(failed-package)
+ST_INSTALL_DEPENDENCY_ARGUMENTS=(--version)
+sillytavern_install_check_dependencies >/dev/null 2>&1 || true
+MOCK_PKG_INSTALL_STATUS=42
+export MOCK_PKG_INSTALL_STATUS
+if sillytavern_install_missing_dependencies > "$pkg_output_file" 2>&1; then
+    fail "Mock pkg 安装失败时流程意外成功"
+fi
+grep -Fq 'MOCK PKG: installation failed' "$pkg_output_file" || fail "pkg 安装错误输出被吞掉"
+[[ "$ST_INSTALL_LAST_ERROR" == *"必要依赖安装失败"* ]] || fail "pkg 安装失败缺少明确错误"
+MOCK_PKG_INSTALL_STATUS=0
+export MOCK_PKG_INSTALL_STATUS
 
 unset PREFIX
 if sillytavern_install_environment_is_supported; then
@@ -187,8 +210,17 @@ git_quiet -C "$source_repo" commit -m "fixture" || fail "无法提交本地安�
 ST_INSTALL_REPOSITORY_URL="$source_repo"
 ST_INSTALL_BRANCH="release"
 successful_target="$target_root/installed"
-sillytavern_install_execute "$successful_target" "install" >/dev/null 2>&1 \
+timeout_called_marker="$TEST_TMP_ROOT/timeout-called"
+timeout() {
+    printf '%s\n' 'CALLED' > "$timeout_called_marker"
+    return 124
+}
+clone_output_file="$TEST_TMP_ROOT/clone-output.log"
+sillytavern_install_execute "$successful_target" "install" > "$clone_output_file" 2>&1 \
     || fail "本地仓库模拟安装失败：$ST_INSTALL_LAST_ERROR"
+[[ ! -e "$timeout_called_marker" ]] || fail "clone 仍调用固定总时长 timeout"
+grep -Fq 'Cloning into' "$clone_output_file" || fail "clone 进度未显示到调用终端"
+grep -Fq 'Cloning into' "$(sillytavern_install_log_file)" || fail "clone 进度未同步写入安装日志"
 sillytavern_path_is_valid "$successful_target" || fail "模拟安装成功后结构无效"
 expected_successful_target="$(path_canonicalize_directory "$successful_target")" || fail "无法规范化模拟安装路径"
 [[ "$ST_PATH" == "$expected_successful_target" ]] || fail "模拟安装成功后未更新 ST_PATH"
@@ -209,13 +241,18 @@ sillytavern_path_is_valid "$replacement_target" || fail "重新安装后的目�
 saved_config_before="$(< "$STERMUX_ROOT/config/user.conf")"
 failed_target="$target_root/failed"
 ST_INSTALL_REPOSITORY_URL="$TEST_TMP_ROOT/missing-offline-repository"
-if sillytavern_install_execute "$failed_target" "install" >/dev/null 2>&1; then
+if sillytavern_install_execute "$failed_target" "install" > "$clone_output_file" 2>&1; then
     fail "不存在的本地源仓库安装意外成功"
 fi
+[[ -s "$clone_output_file" ]] || fail "clone 失败输出被完全吞掉"
 [[ ! -e "$failed_target" ]] || fail "安装失败后创建了目标安装目录"
 [[ "$(< "$STERMUX_ROOT/config/user.conf")" == "$saved_config_before" ]] \
     || fail "安装失败时修改了已保存的 ST_PATH"
 [[ -n "$ST_INSTALL_LAST_STAGING_PATH" ]] || fail "安装失败未保留诊断目录位置"
+[[ "$(basename -- "$ST_INSTALL_LAST_STAGING_PATH")" == .stermux-sillytavern-install.* ]] \
+    || fail "安装失败诊断目录不再使用隐藏临时目录"
+[[ "$(dirname -- "$ST_INSTALL_LAST_STAGING_PATH")" == "$target_root" ]] \
+    || fail "安装失败诊断目录离开了目标父目录"
 if sillytavern_path_is_valid "$ST_INSTALL_LAST_STAGING_PATH"; then
     fail "失败临时目录被误识别为完整安装"
 fi

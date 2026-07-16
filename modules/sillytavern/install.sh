@@ -4,7 +4,6 @@
 # https://docs.sillytavern.app/installation/android-%28termux%29/
 ST_INSTALL_REPOSITORY_URL="${ST_INSTALL_REPOSITORY_URL:-https://github.com/SillyTavern/SillyTavern}"
 ST_INSTALL_BRANCH="${ST_INSTALL_BRANCH:-release}"
-ST_INSTALL_NETWORK_TIMEOUT_SECONDS="${ST_INSTALL_NETWORK_TIMEOUT_SECONDS:-300}"
 ST_INSTALL_LAST_ERROR=""
 ST_INSTALL_LAST_OUTPUT=""
 ST_INSTALL_LAST_STAGING_PATH=""
@@ -43,18 +42,19 @@ sillytavern_install_set_error() {
 sillytavern_install_run_logged() {
     local description="$1"
     shift
-    local output
+    local log_file
     local status
 
     ST_INSTALL_LAST_OUTPUT=""
     sillytavern_install_log "STEP | $description" || true
-    output="$("$@" 2>&1)"
-    status=$?
-    ST_INSTALL_LAST_OUTPUT="$output"
+    log_file="$(sillytavern_install_log_file)"
 
-    if [[ -n "$output" ]]; then
-        printf '%s\n' "$output"
-        sillytavern_install_log "OUTPUT | ${output//$'\n'/ | }" || true
+    if command -v tee >/dev/null 2>&1 && mkdir -p -- "$(dirname -- "$log_file")" 2>/dev/null; then
+        "$@" 2>&1 | tee -a "$log_file"
+        status=${PIPESTATUS[0]}
+    else
+        "$@" 2>&1
+        status=$?
     fi
     sillytavern_install_log "RESULT | $description | exit=$status" || true
     return "$status"
@@ -62,23 +62,13 @@ sillytavern_install_run_logged() {
 
 sillytavern_install_clone_repository() {
     local staging="$1"
-    local timeout_seconds="$ST_INSTALL_NETWORK_TIMEOUT_SECONDS"
-    local -a clone_command=(
-        git clone
-        --branch "$ST_INSTALL_BRANCH"
-        --single-branch
-        "$ST_INSTALL_REPOSITORY_URL"
-        "$staging"
-    )
 
-    if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
-        timeout_seconds=300
-    fi
-    if command -v timeout >/dev/null 2>&1; then
-        GIT_TERMINAL_PROMPT=0 timeout "$timeout_seconds" "${clone_command[@]}"
-    else
-        GIT_TERMINAL_PROMPT=0 "${clone_command[@]}"
-    fi
+    GIT_TERMINAL_PROMPT=0 git clone \
+        --progress \
+        --branch "$ST_INSTALL_BRANCH" \
+        --single-branch \
+        "$ST_INSTALL_REPOSITORY_URL" \
+        "$staging"
 }
 
 sillytavern_install_environment_is_supported() {
@@ -222,7 +212,7 @@ sillytavern_install_missing_dependencies() {
     ui_info "STermux 不会自动执行 pkg upgrade。"
     if ! sillytavern_install_run_logged \
         "安装必要 Termux 软件包" \
-        pkg install "${ST_INSTALL_MISSING_PACKAGES[@]}"; then
+        pkg install -y "${ST_INSTALL_MISSING_PACKAGES[@]}"; then
         sillytavern_install_set_error "必要依赖安装失败。请检查上方 pkg 输出和安装日志。"
         return 1
     fi
@@ -380,9 +370,9 @@ sillytavern_install_execute() {
         sillytavern_install_clone_repository "$staging"
     clone_status=$?
     if (( clone_status != 0 )); then
-        if (( clone_status == 124 )); then
+        if (( clone_status == 130 )); then
             sillytavern_install_set_error \
-                "下载 SillyTavern 超过 ${ST_INSTALL_NETWORK_TIMEOUT_SECONDS} 秒。未完成内容保留在：$staging"
+                "用户取消了 SillyTavern 下载。未完成内容保留在：$staging"
         else
             sillytavern_install_set_error \
                 "下载 SillyTavern 失败。未完成内容保留在：$staging"
