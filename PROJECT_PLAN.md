@@ -854,7 +854,17 @@ Codex 在实施前必须：
 
 禁止凭记忆写死所有数据目录。
 
-Phase 4 V1 依据当前官方独立安装结构，备份整个 `data/` 用户数据根目录并单独保存 `config.yaml`。若 `config.yaml` 声明了非默认 `dataRoot`，在尚未能可靠解析并验证该路径前必须明确停止，不能把不完整备份记录为成功。
+Phase 4 V1 依据当前官方独立安装结构，统一备份：
+
+```text
+data/
+config.yaml
+public/scripts/extensions/third-party/
+```
+
+`third-party/` 存在时整体归档，包含 Git 元数据和隐藏文件；不存在时备份仍可成功，但元数据与日志必须记录为 `missing`。恢复新格式备份时必须同步恢复该目录的完整快照；若备份时目录不存在，恢复后也应为不存在。旧格式备份没有 third-party 状态字段时，不得擅自改动当前扩展目录。
+
+manual、protective、scheduled、catchup 必须通过统一 `backup_create` 使用完全相同的内容范围。若 `config.yaml` 声明了非默认 `dataRoot`，在尚未能可靠解析并验证该路径前必须明确停止，不能把不完整备份记录为成功。
 
 ---
 
@@ -2062,6 +2072,7 @@ manual 自动清理隔离
 备份删除路径越界保护
 恢复
 恢复前保护备份
+third-party 整体备份、缺失记录与同步恢复
 ```
 
 自动测试至少覆盖：
@@ -2078,6 +2089,8 @@ manual 不被自动清理
 protective、scheduled、catchup 混合时只保留最新 2 份
 自动清理只删除最旧的自动备份
 备份根目录路径越界与路径穿越保护
+third-party 包含 Git 仓库和隐藏文件时完整备份与恢复
+third-party 不存在时记录缺失且不阻止备份
 ```
 
 完成标准：

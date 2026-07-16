@@ -282,6 +282,9 @@ manual 不计入自动备份池且不参与自动删除
 备份删除路径越界与路径穿越保护
 恢复指定备份
 恢复前自动创建保护备份
+third-party Git 仓库与隐藏文件完整归档
+third-party 目录不存在时记录 missing 且备份继续
+恢复后 third-party 文件完整并同步移除备份后新增项
 非法备份目录处理
 不存在的备份处理
 ```
@@ -295,7 +298,9 @@ manual 不计入自动备份池且不参与自动删除
 5. 自动备份池测试必须混合 protective、scheduled、catchup，并按创建时间验证仅保留最新 2 份。
 6. `tests/test_backup.sh` 必须自行创建 SillyTavern 数据、配置和备份根目录 Fixture；不得读取真实 `config/user.conf`、真实 `ST_PATH` 或真实备份。
 7. 恢复测试必须先验证归档成员与恢复临时目录边界，不得把路径穿越、符号链接或备份根目录本身交给递归删除。
-8. Phase 4 默认只验证官方独立安装的 `config.yaml + data/` 布局；检测到自定义 `dataRoot` 时必须失败并给出明确原因，禁止用不完整备份冒充成功。
+8. Phase 4 默认验证 `config.yaml + data/ + public/scripts/extensions/third-party/`；检测到自定义 `dataRoot` 时必须失败并给出明确原因，禁止用不完整备份冒充成功。
+9. `third-party/` 测试必须包含实际 Git 仓库、`.git` 和普通隐藏文件，并验证恢复后的完整性。
+10. `third-party/` 缺失测试必须确认备份成功、元数据和日志记录 `missing`，恢复时同步恢复为目录不存在。
 
 ---
 

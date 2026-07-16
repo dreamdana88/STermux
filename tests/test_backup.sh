@@ -46,13 +46,19 @@ ST_PATH="$TEST_TMP_ROOT/Silly Tavern 中文"
 BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"
 AUTOMATIC_BACKUP_KEEP=2
 TEST_BACKUP_EPOCH=100
+THIRD_PARTY_DIR="$ST_PATH/public/scripts/extensions/third-party"
 
-mkdir -p -- "$STERMUX_ROOT/data/logs" "$ST_PATH/data/default-user/chats" || exit 1
+mkdir -p -- "$STERMUX_ROOT/data/logs" "$ST_PATH/data/default-user/chats" \
+    "$THIRD_PARTY_DIR/GitExtension" || exit 1
 printf '%s\n' '#!/usr/bin/env bash' > "$ST_PATH/start.sh"
 printf '%s\n' '// fixture' > "$ST_PATH/server.js"
 printf '%s\n' '{"name":"sillytavern"}' > "$ST_PATH/package.json"
 printf '%s\n' 'dataRoot: ./data' 'port: 8000' > "$ST_PATH/config.yaml"
 printf '%s\n' 'original chat' > "$ST_PATH/data/default-user/chats/chat.txt"
+git init -q "$THIRD_PARTY_DIR/GitExtension" || fail "无法创建 third-party Git 仓库 Fixture"
+printf '%s\n' 'extension snapshot' > "$THIRD_PARTY_DIR/GitExtension/index.js"
+printf '%s\n' 'hidden extension setting' > "$THIRD_PARTY_DIR/GitExtension/.hidden-setting"
+printf '%s\n' 'root hidden file' > "$THIRD_PARTY_DIR/.backup-hidden"
 
 source "$PROJECT_ROOT/core/utils.sh"
 source "$PROJECT_ROOT/core/ui.sh"
@@ -70,14 +76,28 @@ MANUAL_ID="$(basename -- "$MANUAL_PATH")"
 [[ -s "$MANUAL_PATH/backup.tar.gz" ]] || fail "manual 归档不存在"
 [[ -s "$MANUAL_PATH/metadata.conf" ]] || fail "manual 元数据不存在"
 [[ -f "$MANUAL_PATH/config.yaml" ]] || fail "manual 未保存 config.yaml"
+[[ -s "$MANUAL_PATH/third-party.tar.gz" ]] || fail "manual 未保存 third-party 归档"
 grep -Fxq 'BACKUP_TYPE=manual' "$MANUAL_PATH/metadata.conf" || fail "manual 类型元数据错误"
+grep -Fxq 'BACKUP_THIRD_PARTY_STATUS=present' "$MANUAL_PATH/metadata.conf" \
+    || fail "third-party 存在状态未写入元数据"
+tar -tzf "$MANUAL_PATH/third-party.tar.gz" > "$TEST_TMP_ROOT/third-party-members.txt" \
+    || fail "无法读取 third-party 归档成员"
+grep -Fq './GitExtension/.git/HEAD' "$TEST_TMP_ROOT/third-party-members.txt" \
+    || fail "third-party 归档未包含 Git 隐藏目录"
+grep -Fq './GitExtension/.hidden-setting' "$TEST_TMP_ROOT/third-party-members.txt" \
+    || fail "third-party 归档未包含扩展隐藏文件"
+grep -Fq './.backup-hidden' "$TEST_TMP_ROOT/third-party-members.txt" \
+    || fail "third-party 归档未包含根隐藏文件"
 
 create_backup_at 200 protective "before update" || fail "无法创建 protective 备份"
 PROTECTIVE_PATH="$BACKUP_LAST_PATH"
+[[ -s "$PROTECTIVE_PATH/third-party.tar.gz" ]] || fail "protective 未使用统一 third-party 范围"
 create_backup_at 300 scheduled "scheduled fixture" || fail "无法创建 scheduled 备份"
 SCHEDULED_PATH="$BACKUP_LAST_PATH"
+[[ -s "$SCHEDULED_PATH/third-party.tar.gz" ]] || fail "scheduled 未使用统一 third-party 范围"
 create_backup_at 400 catchup "single catchup fixture" || fail "无法创建 catchup 备份"
 CATCHUP_PATH="$BACKUP_LAST_PATH"
+[[ -s "$CATCHUP_PATH/third-party.tar.gz" ]] || fail "catchup 未使用统一 third-party 范围"
 
 [[ -d "$MANUAL_PATH" ]] || fail "manual 被自动轮换删除"
 [[ ! -e "$PROTECTIVE_PATH" ]] || fail "自动池未删除最旧 protective"
@@ -158,16 +178,44 @@ fi
 
 printf '%s\n' 'snapshot before restore' > "$ST_PATH/data/default-user/chats/chat.txt"
 printf '%s\n' 'dataRoot: ./data' 'port: 8000' > "$ST_PATH/config.yaml"
+printf '%s\n' 'extension snapshot before restore' > "$THIRD_PARTY_DIR/GitExtension/index.js"
 create_backup_at 1000 manual "restore source" || fail "无法创建恢复源备份"
 RESTORE_PATH="$BACKUP_LAST_PATH"
 printf '%s\n' 'changed after backup' > "$ST_PATH/data/default-user/chats/chat.txt"
 printf '%s\n' 'dataRoot: ./data' 'port: 9000' > "$ST_PATH/config.yaml"
+rm -f -- "$THIRD_PARTY_DIR/GitExtension/index.js" \
+    "$THIRD_PARTY_DIR/GitExtension/.hidden-setting" "$THIRD_PARTY_DIR/.backup-hidden"
+mkdir -p -- "$THIRD_PARTY_DIR/AddedAfterBackup"
+printf '%s\n' 'must disappear after restore' > "$THIRD_PARTY_DIR/AddedAfterBackup/index.js"
 TEST_BACKUP_EPOCH=1100
 backup_restore_path "$RESTORE_PATH" || fail "恢复失败：$BACKUP_LAST_ERROR"
 [[ "$(< "$ST_PATH/data/default-user/chats/chat.txt")" == "snapshot before restore" ]] || fail "恢复后聊天数据不一致"
 grep -Fxq 'port: 8000' "$ST_PATH/config.yaml" || fail "恢复后 config.yaml 不一致"
+[[ "$(< "$THIRD_PARTY_DIR/GitExtension/index.js")" == "extension snapshot before restore" ]] \
+    || fail "恢复后扩展普通文件不完整"
+[[ "$(< "$THIRD_PARTY_DIR/GitExtension/.hidden-setting")" == "hidden extension setting" ]] \
+    || fail "恢复后扩展隐藏文件不完整"
+[[ -f "$THIRD_PARTY_DIR/GitExtension/.git/HEAD" ]] || fail "恢复后 Git 仓库不完整"
+[[ -f "$THIRD_PARTY_DIR/.backup-hidden" ]] || fail "恢复后 third-party 根隐藏文件不完整"
+[[ ! -e "$THIRD_PARTY_DIR/AddedAfterBackup" ]] || fail "恢复未同步移除备份后新增的扩展"
 [[ "$(automatic_count)" -le 2 ]] || fail "恢复前 protective 备份未遵守自动池上限"
 grep -Fq $'restore\tsuccess' "$STERMUX_ROOT/data/logs/backup.log" || fail "恢复成功未写入日志"
+grep -Fq 'third-party=present' "$STERMUX_ROOT/data/logs/backup.log" || fail "日志未记录 third-party 存在状态"
+
+mv -- "$THIRD_PARTY_DIR" "$TEST_TMP_ROOT/third-party-held" || fail "无法准备 third-party 缺失 Fixture"
+TEST_BACKUP_EPOCH=1120
+backup_create manual "third-party missing fixture" || fail "third-party 缺失时备份失败：$BACKUP_LAST_ERROR"
+MISSING_THIRD_PARTY_BACKUP="$BACKUP_LAST_PATH"
+[[ ! -e "$MISSING_THIRD_PARTY_BACKUP/third-party.tar.gz" ]] || fail "third-party 缺失时仍生成了归档"
+grep -Fxq 'BACKUP_THIRD_PARTY_STATUS=missing' "$MISSING_THIRD_PARTY_BACKUP/metadata.conf" \
+    || fail "third-party 缺失状态未写入元数据"
+grep -Fq 'third-party=missing' "$STERMUX_ROOT/data/logs/backup.log" || fail "日志未记录 third-party 缺失状态"
+mkdir -p -- "$THIRD_PARTY_DIR/CurrentOnly"
+printf '%s\n' 'must be removed' > "$THIRD_PARTY_DIR/CurrentOnly/index.js"
+TEST_BACKUP_EPOCH=1130
+backup_restore_path "$MISSING_THIRD_PARTY_BACKUP" || fail "缺失状态 third-party 恢复失败：$BACKUP_LAST_ERROR"
+[[ ! -e "$THIRD_PARTY_DIR" ]] || fail "恢复 third-party 缺失快照时未同步移除当前目录"
+grep -Fq 'third-party=missing' "$STERMUX_ROOT/data/logs/backup.log" || fail "恢复日志未记录 third-party 缺失状态"
 
 ORIGINAL_BACKUP_ROOT="$BACKUP_ROOT"
 BACKUP_ROOT="$ST_PATH/data/nested-backups"

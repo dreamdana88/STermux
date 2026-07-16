@@ -107,6 +107,7 @@ backup_staging_remove() {
 
 backup_write_metadata() {
     local file="$1" id="$2" epoch="$3" display_time="$4" type="$5" reason="$6" size="$7"
+    local third_party_status="$8" data_archive_size="$9" third_party_archive_size="${10}"
     local commit branch
 
     commit="$(git_current_commit "$ST_PATH" 2>/dev/null || printf '%s' unknown)"
@@ -119,10 +120,13 @@ backup_write_metadata() {
         printf 'BACKUP_TYPE=%s\n' "$type"
         printf 'BACKUP_REASON=%s\n' "$reason"
         printf 'BACKUP_SIZE=%s\n' "$size"
+        printf 'BACKUP_DATA_ARCHIVE_SIZE=%s\n' "$data_archive_size"
+        printf 'BACKUP_THIRD_PARTY_STATUS=%s\n' "$third_party_status"
+        printf 'BACKUP_THIRD_PARTY_ARCHIVE_SIZE=%s\n' "$third_party_archive_size"
         printf 'BACKUP_STATUS=success\n'
         printf 'ST_COMMIT=%s\n' "$commit"
         printf 'ST_BRANCH=%s\n' "$branch"
-        printf 'BACKUP_RULE_VERSION=1\n'
+        printf 'BACKUP_RULE_VERSION=2\n'
     } > "$file"
 }
 
@@ -132,9 +136,50 @@ backup_archive_is_valid() {
     tar -tzf "$archive" >/dev/null 2>&1
 }
 
+backup_directory_is_valid() {
+    local directory="$1"
+    local third_party_status backup_status size data_archive_size third_party_archive_size
+    local actual_data_size actual_config_size actual_third_party_size=0 actual_total_size
+
+    [[ -f "$directory/config.yaml" && -r "$directory/config.yaml" ]] || return 1
+    backup_archive_is_valid "$directory/backup.tar.gz" || return 1
+    backup_status="$(backup_metadata_get "$directory/metadata.conf" BACKUP_STATUS)" || return 1
+    [[ "$backup_status" == success ]] || return 1
+    size="$(backup_metadata_get "$directory/metadata.conf" BACKUP_SIZE)" || return 1
+    data_archive_size="$(backup_metadata_get "$directory/metadata.conf" BACKUP_DATA_ARCHIVE_SIZE)" \
+        || return 1
+    third_party_archive_size="$(backup_metadata_get "$directory/metadata.conf" BACKUP_THIRD_PARTY_ARCHIVE_SIZE)" \
+        || return 1
+    [[ "$size" =~ ^[1-9][0-9]*$ && "$data_archive_size" =~ ^[1-9][0-9]*$ \
+        && "$third_party_archive_size" =~ ^[0-9]+$ ]] || return 1
+    actual_data_size="$(wc -c < "$directory/backup.tar.gz" | tr -d '[:space:]')"
+    actual_config_size="$(wc -c < "$directory/config.yaml" | tr -d '[:space:]')"
+    [[ "$actual_data_size" == "$data_archive_size" ]] || return 1
+    third_party_status="$(backup_metadata_get "$directory/metadata.conf" BACKUP_THIRD_PARTY_STATUS)" \
+        || return 1
+    case "$third_party_status" in
+        present)
+            backup_archive_is_valid "$directory/third-party.tar.gz" || return 1
+            actual_third_party_size="$(wc -c < "$directory/third-party.tar.gz" | tr -d '[:space:]')"
+            [[ "$actual_third_party_size" == "$third_party_archive_size" ]] || return 1
+            ;;
+        missing)
+            [[ ! -e "$directory/third-party.tar.gz" ]] || return 1
+            [[ "$third_party_archive_size" == 0 ]] || return 1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    actual_total_size=$((actual_data_size + actual_config_size + actual_third_party_size))
+    [[ "$actual_total_size" == "$size" ]]
+}
+
 backup_create() {
     local type="$1" reason="${2:-unspecified}"
-    local root data_root staging epoch display_time id final archive size
+    local root data_root third_party_root staging epoch display_time id final
+    local data_archive third_party_archive size data_archive_size config_size
+    local third_party_archive_size=0 third_party_status
 
     BACKUP_LAST_ERROR=""
     BACKUP_LAST_PATH=""
@@ -155,6 +200,21 @@ backup_create() {
         BACKUP_LAST_ERROR="SillyTavern data 包含符号链接，为保证备份可安全恢复已停止"
         return 1
     fi
+    third_party_status="$BACKUP_SOURCE_THIRD_PARTY_STATUS"
+    if [[ "$third_party_status" == present ]]; then
+        third_party_root="$(path_canonicalize_directory "$BACKUP_SOURCE_THIRD_PARTY_DIR")" || {
+            BACKUP_LAST_ERROR="无法解析 SillyTavern third-party 目录"
+            return 1
+        }
+        if [[ "$root" == "$third_party_root" || "$root" == "$third_party_root/"* ]]; then
+            BACKUP_LAST_ERROR="备份根目录不得位于 SillyTavern third-party 目录内"
+            return 1
+        fi
+        if find "$third_party_root" -type l -print -quit | grep -q .; then
+            BACKUP_LAST_ERROR="SillyTavern third-party 包含符号链接，为保证备份可安全恢复已停止"
+            return 1
+        fi
+    fi
     staging="$(mktemp -d "$root/.stermux-backup.tmp.XXXXXX")" || {
         BACKUP_LAST_ERROR="无法创建备份临时目录"
         return 1
@@ -164,20 +224,37 @@ backup_create() {
     BACKUP_SEQUENCE=$((BACKUP_SEQUENCE + 1))
     id="${epoch}_${type}_$$_${BACKUP_SEQUENCE}"
     final="$root/$id"
-    archive="$staging/backup.tar.gz"
+    data_archive="$staging/backup.tar.gz"
+    third_party_archive="$staging/third-party.tar.gz"
 
     ui_info "正在创建 $type 备份..."
-    if ! tar -C "$BACKUP_SOURCE_DATA_DIR" -czf "$archive" .; then
+    if ! tar -C "$BACKUP_SOURCE_DATA_DIR" -czf "$data_archive" .; then
         BACKUP_LAST_ERROR="无法归档 SillyTavern data 目录"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
     fi
-    if ! backup_archive_is_valid "$archive"; then
-        BACKUP_LAST_ERROR="备份归档验证失败"
+    if ! backup_archive_is_valid "$data_archive"; then
+        BACKUP_LAST_ERROR="data 备份归档验证失败"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
+    fi
+    if [[ "$third_party_status" == present ]]; then
+        if ! tar -C "$BACKUP_SOURCE_THIRD_PARTY_DIR" -czf "$third_party_archive" .; then
+            BACKUP_LAST_ERROR="无法归档 SillyTavern third-party 目录"
+            backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
+            backup_staging_remove "$staging" || true
+            return 1
+        fi
+        if ! backup_archive_is_valid "$third_party_archive"; then
+            BACKUP_LAST_ERROR="third-party 备份归档验证失败"
+            backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
+            backup_staging_remove "$staging" || true
+            return 1
+        fi
+    else
+        ui_info "third-party 目录不存在，本次备份已记录为缺失。"
     fi
     cp -- "$BACKUP_SOURCE_CONFIG_FILE" "$staging/config.yaml" || {
         BACKUP_LAST_ERROR="无法保存 config.yaml"
@@ -185,20 +262,33 @@ backup_create() {
         backup_staging_remove "$staging" || true
         return 1
     }
-    size="$(wc -c < "$archive" | tr -d '[:space:]')"
-    [[ "$size" =~ ^[1-9][0-9]*$ ]] || {
+    data_archive_size="$(wc -c < "$data_archive" | tr -d '[:space:]')"
+    config_size="$(wc -c < "$staging/config.yaml" | tr -d '[:space:]')"
+    if [[ "$third_party_status" == present ]]; then
+        third_party_archive_size="$(wc -c < "$third_party_archive" | tr -d '[:space:]')"
+    fi
+    [[ "$data_archive_size" =~ ^[1-9][0-9]*$ && "$config_size" =~ ^[0-9]+$ \
+        && "$third_party_archive_size" =~ ^[0-9]+$ ]] || {
         BACKUP_LAST_ERROR="无法确认备份文件大小"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
     }
+    size=$((data_archive_size + config_size + third_party_archive_size))
     backup_write_metadata "$staging/metadata.conf" "$id" "$epoch" "$display_time" \
-        "$type" "$reason" "$size" || {
+        "$type" "$reason" "$size" "$third_party_status" "$data_archive_size" \
+        "$third_party_archive_size" || {
         BACKUP_LAST_ERROR="无法写入备份元数据"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
     }
+    if ! backup_directory_is_valid "$staging"; then
+        BACKUP_LAST_ERROR="备份内容完整性验证失败"
+        backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
+        backup_staging_remove "$staging" || true
+        return 1
+    fi
     [[ ! -e "$final" ]] || {
         BACKUP_LAST_ERROR="备份标识冲突：$id"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
@@ -212,7 +302,7 @@ backup_create() {
         return 1
     }
     BACKUP_LAST_PATH="$final"
-    backup_log create success "$id" "$type" || true
+    backup_log create success "$id" "$type;third-party=$third_party_status" || true
     if backup_type_is_automatic "$type"; then
         backup_rotate_automatic || ui_warning "备份已创建，但自动备份池清理失败：$BACKUP_LAST_ERROR"
     fi
@@ -438,7 +528,7 @@ backup_restore_temp_path_is_safe() {
     name="$(basename -- "$target")"
     [[ "$parent" == "$st_root" ]] || return 1
     case "$name" in
-        .stermux-restore-stage.*|.stermux-restore-old-data.*|.stermux-restore-old-config.*)
+        .stermux-restore-stage.*|.stermux-restore-old-data.*|.stermux-restore-old-config.*|.stermux-restore-old-third-party.*)
             return 0
             ;;
         *)
@@ -459,11 +549,41 @@ backup_restore_temp_remove() {
     fi
 }
 
+backup_restore_rollback_after_swap() {
+    local stage="$1" data_target="$2" config_target="$3" third_party_target="$4"
+    local old_data="$5" old_config="$6" old_third_party="$7"
+    local sync_third_party="$8" had_third_party="$9"
+    local failed=0
+
+    if [[ -e "$data_target" ]]; then
+        mv -- "$data_target" "$stage/failed-data" || failed=$((failed + 1))
+    fi
+    if [[ -e "$config_target" ]]; then
+        mv -- "$config_target" "$stage/failed-config.yaml" || failed=$((failed + 1))
+    fi
+    if [[ "$sync_third_party" == true && -e "$third_party_target" ]]; then
+        mv -- "$third_party_target" "$stage/failed-third-party" || failed=$((failed + 1))
+    fi
+    if [[ -e "$old_data" ]]; then
+        mv -- "$old_data" "$data_target" || failed=$((failed + 1))
+    fi
+    if [[ -e "$old_config" ]]; then
+        mv -- "$old_config" "$config_target" || failed=$((failed + 1))
+    fi
+    if [[ "$sync_third_party" == true && "$had_third_party" == true && -e "$old_third_party" ]]; then
+        mv -- "$old_third_party" "$third_party_target" || failed=$((failed + 1))
+    fi
+    (( failed == 0 ))
+}
+
 backup_restore_path() {
-    local backup_path="$1" archive id stage old_data old_config cleanup_failed=0
+    local backup_path="$1" archive third_party_archive id stage old_data old_config
+    local old_third_party third_party_status third_party_target third_party_parent
+    local cleanup_failed=0 sync_third_party=false had_third_party=false
     BACKUP_LAST_ERROR=""
     backup_delete_path_is_safe "$backup_path" || { BACKUP_LAST_ERROR="恢复目标不是安全备份目录"; return 1; }
     archive="$backup_path/backup.tar.gz"
+    third_party_archive="$backup_path/third-party.tar.gz"
     id="$(backup_metadata_get "$backup_path/metadata.conf" BACKUP_ID)" || {
         BACKUP_LAST_ERROR="备份元数据缺少标识"
         return 1
@@ -472,14 +592,52 @@ backup_restore_path() {
         BACKUP_LAST_ERROR="备份归档无效或包含危险路径"
         return 1
     }
+    third_party_status="$(backup_metadata_get "$backup_path/metadata.conf" BACKUP_THIRD_PARTY_STATUS)" \
+        || third_party_status="legacy"
+    case "$third_party_status" in
+        present)
+            sync_third_party=true
+            backup_archive_is_valid "$third_party_archive" \
+                && backup_archive_members_are_safe "$third_party_archive" || {
+                BACKUP_LAST_ERROR="third-party 备份归档无效或包含危险路径"
+                return 1
+            }
+            ;;
+        missing)
+            sync_third_party=true
+            [[ ! -e "$third_party_archive" ]] || {
+                BACKUP_LAST_ERROR="元数据记录 third-party 缺失，但备份中存在冲突归档"
+                return 1
+            }
+            ;;
+        legacy)
+            ;;
+        *)
+            BACKUP_LAST_ERROR="备份中的 third-party 状态无效"
+            return 1
+            ;;
+    esac
+    if [[ "$third_party_status" != legacy ]] && ! backup_directory_is_valid "$backup_path"; then
+        BACKUP_LAST_ERROR="备份内容或大小验证失败"
+        return 1
+    fi
     sillytavern_backup_resolve_source || return 1
+    third_party_target="$(sillytavern_backup_third_party_path)"
+    third_party_parent="$(dirname -- "$third_party_target")"
+    if [[ "$sync_third_party" == true ]]; then
+        mkdir -p -- "$third_party_parent" || {
+            BACKUP_LAST_ERROR="无法准备 third-party 父目录"
+            return 1
+        }
+    fi
     stage="$(mktemp -d "$ST_PATH/.stermux-restore-stage.XXXXXX")" || {
         BACKUP_LAST_ERROR="无法创建恢复临时目录"
         return 1
     }
     old_data="$ST_PATH/.stermux-restore-old-data.$$.${RANDOM:-0}"
     old_config="$ST_PATH/.stermux-restore-old-config.$$.${RANDOM:-0}"
-    [[ ! -e "$old_data" && ! -e "$old_config" ]] || {
+    old_third_party="$ST_PATH/.stermux-restore-old-third-party.$$.${RANDOM:-0}"
+    [[ ! -e "$old_data" && ! -e "$old_config" && ! -e "$old_third_party" ]] || {
         BACKUP_LAST_ERROR="存在冲突的恢复临时路径"
         backup_restore_temp_remove "$stage" || true
         return 1
@@ -500,6 +658,25 @@ backup_restore_path() {
         backup_restore_temp_remove "$stage" || true
         backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
         return 1
+    fi
+    if [[ "$third_party_status" == present ]]; then
+        mkdir -p -- "$stage/third-party" || {
+            BACKUP_LAST_ERROR="无法准备 third-party 恢复目录"
+            backup_restore_temp_remove "$stage" || true
+            return 1
+        }
+        tar -C "$stage/third-party" -xzf "$third_party_archive" || {
+            BACKUP_LAST_ERROR="无法解压 third-party 备份"
+            backup_restore_temp_remove "$stage" || true
+            backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
+            return 1
+        }
+        if find "$stage/third-party" -type l -print -quit | grep -q .; then
+            BACKUP_LAST_ERROR="恢复的 third-party 包含符号链接，为避免路径逃逸已拒绝恢复"
+            backup_restore_temp_remove "$stage" || true
+            backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
+            return 1
+        fi
     fi
     cp -- "$backup_path/config.yaml" "$stage/config.yaml" || {
         BACKUP_LAST_ERROR="备份缺少可读取的 config.yaml"
@@ -525,32 +702,55 @@ backup_restore_path() {
         backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
         return 1
     fi
+    if [[ "$sync_third_party" == true && -d "$third_party_target" ]]; then
+        if ! mv -- "$third_party_target" "$old_third_party"; then
+            mv -- "$old_data" "$BACKUP_SOURCE_DATA_DIR" || true
+            mv -- "$old_config" "$BACKUP_SOURCE_CONFIG_FILE" || true
+            BACKUP_LAST_ERROR="无法暂存当前 third-party 目录，未执行恢复"
+            backup_restore_temp_remove "$stage" || true
+            backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
+            return 1
+        fi
+        had_third_party=true
+    fi
     if ! mv -- "$stage/data" "$BACKUP_SOURCE_DATA_DIR"; then
-        mv -- "$old_data" "$BACKUP_SOURCE_DATA_DIR" || true
-        mv -- "$old_config" "$BACKUP_SOURCE_CONFIG_FILE" || true
+        backup_restore_rollback_after_swap "$stage" "$BACKUP_SOURCE_DATA_DIR" \
+            "$BACKUP_SOURCE_CONFIG_FILE" "$third_party_target" "$old_data" "$old_config" \
+            "$old_third_party" "$sync_third_party" "$had_third_party" || true
         BACKUP_LAST_ERROR="无法安装恢复后的 data 目录"
         backup_restore_temp_remove "$stage" || true
         backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
         return 1
     fi
     if ! mv -- "$stage/config.yaml" "$BACKUP_SOURCE_CONFIG_FILE"; then
-        mv -- "$BACKUP_SOURCE_DATA_DIR" "$stage/failed-data" || true
-        mv -- "$old_data" "$BACKUP_SOURCE_DATA_DIR" || true
-        mv -- "$old_config" "$BACKUP_SOURCE_CONFIG_FILE" || true
+        backup_restore_rollback_after_swap "$stage" "$BACKUP_SOURCE_DATA_DIR" \
+            "$BACKUP_SOURCE_CONFIG_FILE" "$third_party_target" "$old_data" "$old_config" \
+            "$old_third_party" "$sync_third_party" "$had_third_party" || true
         BACKUP_LAST_ERROR="无法恢复 config.yaml，已尝试回滚"
+        backup_restore_temp_remove "$stage" || true
+        backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
+        return 1
+    fi
+    if [[ "$third_party_status" == present ]] \
+        && ! mv -- "$stage/third-party" "$third_party_target"; then
+        backup_restore_rollback_after_swap "$stage" "$BACKUP_SOURCE_DATA_DIR" \
+            "$BACKUP_SOURCE_CONFIG_FILE" "$third_party_target" "$old_data" "$old_config" \
+            "$old_third_party" "$sync_third_party" "$had_third_party" || true
+        BACKUP_LAST_ERROR="无法恢复 third-party，已尝试回滚"
         backup_restore_temp_remove "$stage" || true
         backup_log restore failed "$id" "$BACKUP_LAST_ERROR" || true
         return 1
     fi
     backup_restore_temp_remove "$old_data" || cleanup_failed=$((cleanup_failed + 1))
     backup_restore_temp_remove "$old_config" || cleanup_failed=$((cleanup_failed + 1))
+    backup_restore_temp_remove "$old_third_party" || cleanup_failed=$((cleanup_failed + 1))
     backup_restore_temp_remove "$stage" || cleanup_failed=$((cleanup_failed + 1))
     if (( cleanup_failed > 0 )); then
         BACKUP_LAST_ERROR="数据已恢复，但清理恢复临时内容失败"
         backup_log restore warning "$id" "$BACKUP_LAST_ERROR" || true
         return 2
     fi
-    backup_log restore success "$id" "data and config.yaml" || true
+    backup_log restore success "$id" "data,config.yaml,third-party=$third_party_status" || true
 }
 
 backup_restore_interactive() {

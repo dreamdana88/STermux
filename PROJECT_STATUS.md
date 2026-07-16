@@ -94,7 +94,7 @@
 ## 已知问题
 
 - 第三方扩展显示名可能与目录名不一致；暂作为未来 UI 优化事项，不扩展 Phase 3 范围。
-- Phase 4 V1 仅处理官方默认 `config.yaml + data/` 布局；检测到自定义 `dataRoot` 时会明确拒绝备份，避免产生漏数据的伪成功结果。
+- Phase 4 V1 处理 `config.yaml + data/ + public/scripts/extensions/third-party/`；检测到自定义 `dataRoot` 时仍会明确拒绝备份，避免产生漏数据的伪成功结果。
 
 范围说明：Phase 3 按计划只管理 `public/scripts/extensions/third-party` 中为所有用户安装的扩展；新版 SillyTavern 的按用户扩展目录不在本阶段范围内。
 
@@ -165,7 +165,10 @@
 - 实机完成 manual 策略设置、列表显示、持久化和取消；策略修改未移动、删除或破坏扩展目录。
 - 实机当时没有存在可用更新的扩展，因此未触发真实 Git 扩展更新；单个、多选和批量更新流程已由隔离自动测试覆盖，未来自然出现更新时可补充观察，不阻塞 Phase 3 验收。
 - 新增 `core/backup.sh` 与 `modules/sillytavern/backup-rules.sh`，统一实现 manual、protective、scheduled、catchup 四类备份及元数据。
-- 备份内容按当前官方默认结构覆盖整个 `data/` 并保存 `config.yaml`；归档成功后执行可读性、非空及元数据验证，再原子移动到正式备份目录。
+- 统一备份范围覆盖整个 `data/`、`config.yaml` 和全局 `public/scripts/extensions/third-party/`；四种备份类型使用相同范围。
+- `third-party/` 使用独立归档完整保存 Git 元数据、隐藏文件和普通文件；目录不存在时元数据与日志记录 `missing`，不会导致备份失败。
+- 新格式恢复会同步恢复整个 third-party 快照；备份时为 `missing` 则恢复为目录不存在，旧格式备份则保持当前扩展目录不变。
+- 备份验证升级为同时核对 data 与 third-party 归档可读性、各归档实际大小、总大小和元数据一致性。
 - 主菜单新增“备份与恢复”，支持列表、manual 创建、恢复、单个删除和安全多选批量删除。
 - manual 永不参与自动轮换；protective、scheduled、catchup 共用自动池并只保留创建时间最新 2 份。
 - 删除操作只允许经过校验的备份根目录直属条目，自动删除显式拒绝 manual；批量删除单项失败不阻断后续项并写入日志。
@@ -272,13 +275,18 @@
 | Bash 语法 | 通过 | Git Bash 通过 | 待测试 | 待实机验证 |
 | manual 与四类元数据 | 临时数据 Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 归档非空、可读取与成功状态 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| third-party 正常备份与四类型统一范围 | manual/protective/scheduled/catchup 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| third-party Git 仓库与隐藏文件 | 实际 `.git`、扩展隐藏文件和根隐藏文件通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| third-party 不存在 | 备份成功、元数据与日志记录 missing | Git Bash 通过 | 待测试 | 本地通过 |
 | 自动池混合类型仅保留最新 2 份 | protective/scheduled/catchup 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | manual 自动清理隔离 | 自动轮换和自动删除接口均拒绝 manual | Git Bash 通过 | 待测试 | 本地通过 |
 | 列表时间、类型、大小和标识 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 单删、批删、取消、非法与重复编号 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 单项删除失败继续后续项 | 删除函数 Mock 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 根目录、越界、穿越和符号链接保护 | 临时外部哨兵通过；符号链接在兼容环境执行 | Git Bash 路径边界通过 | 待测试 | 本地通过 |
-| 恢复与恢复前 protective | 数据和 config.yaml 往返通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 恢复与恢复前 protective | data、config.yaml、third-party 往返通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| third-party 同步恢复完整性 | Git/隐藏/普通文件恢复并移除快照外新增项 | Git Bash 通过 | 待测试 | 本地通过 |
+| third-party missing 状态恢复 | 当前扩展先由 protective 保存，再同步恢复为不存在 | Git Bash 通过 | 待测试 | 本地通过 |
 | 更新前 protective 联动 | 更新与失败路径 Mock 通过 | Git Bash 通过 | 待测试 | 本地通过 |
 | 自定义 dataRoot 安全拒绝 | 通过，未写入成功备份 | Git Bash 通过 | 待测试 | 本地通过 |
 | 真实用户配置、数据与备份隔离 | 临时项目与独立 Fixture 通过 | Git Bash 通过 | 不适用 | 本地通过 |
@@ -304,4 +312,4 @@
 
 2026-07-16：Phase 3 在 Android Termux 成功扫描 15 个 third-party 一级扩展，Git/非 Git 分类及 manual 策略设置、保存和取消均通过，阶段验收完成。
 
-2026-07-16：Phase 4 备份核心完成本地实现；Bash 语法、隔离备份测试、完整 10/10 回归及 `git diff --check` 通过，等待 Android Termux 实机验收。
+2026-07-16：Phase 4 备份范围扩展至 data、config.yaml 和全局 third-party；Git/隐藏文件、目录缺失与同步恢复回归通过。Bash 语法及完整 10/10 回归通过，等待 Android Termux 实机验收。
