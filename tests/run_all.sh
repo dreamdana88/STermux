@@ -14,7 +14,6 @@ syntax_files=(
     "$PROJECT_ROOT/core/utils.sh"
     "$PROJECT_ROOT/modules/sillytavern/update.sh"
     "$PROJECT_ROOT/config/default.conf"
-    "$PROJECT_ROOT/config/user.conf"
     "$TEST_ROOT/run_all.sh"
     "$TEST_ROOT/test_config.sh"
     "$TEST_ROOT/test_git.sh"
@@ -24,6 +23,7 @@ syntax_files=(
 )
 
 printf '%s\n' '== Bash 语法检查 =='
+# 真实 config/user.conf 可能包含用户设备的绝对路径，自动测试禁止读取它。
 if ! bash -n "${syntax_files[@]}"; then
     printf '%s\n' '语法检查失败。' >&2
     exit 1

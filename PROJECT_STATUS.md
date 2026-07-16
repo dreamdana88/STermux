@@ -10,9 +10,9 @@
 
 阶段名称：SillyTavern 更新
 
-状态：待 Termux 实机验证
+状态：修复完成，待 Termux 回归验证
 
-最后更新：2026-07-16（Phase 2 编码与本地自动测试完成）
+最后更新：2026-07-16（test_manager.sh 配置隔离缺陷已修复并通过本地回归）
 
 ---
 
@@ -21,7 +21,7 @@
 | Phase   | 内容             | 状态   |
 | ------- | ---------------- | ------ |
 | Phase 1 | 基础骨架         | UI 修复待复测 |
-| Phase 2 | SillyTavern 更新 | 待验收 |
+| Phase 2 | SillyTavern 更新 | 修复完成，待实机回归 |
 | Phase 3 | 第三方扩展更新   | 未开始 |
 | Phase 4 | 备份核心         | 未开始 |
 | Phase 5 | 定时备份         | 未开始 |
@@ -62,13 +62,14 @@
 ## 待验证功能
 
 - Phase 1 终端主菜单社区标题边框的 Android Termux 目视复测
+- `tests/test_manager.sh` 配置隔离修复的 Android Termux 回归测试
 - Phase 2 更新功能的 Android Termux 实机测试
 
 ---
 
 ## 已知问题
 
-暂无。
+暂无未修复问题。配置隔离缺陷已完成本地修复，等待 Termux 回归确认。
 
 ---
 
@@ -86,6 +87,11 @@
 - 主菜单新增“更新中心”，支持检查、执行更新和查看历史。
 - 新增 `tests/test_ui.sh` 和 `tests/test_git.sh`。
 - 本地自动测试 5/5 通过，Phase 1 回归测试未发现退化。
+- 修复 `tests/test_manager.sh` 复制真实 `config/user.conf`、可能启动真实 SillyTavern 的隔离缺陷。
+- 隔离项目现仅复制 `default.conf`，并由测试自身创建专用空白 `user.conf`。
+- 新增毒化来源配置与违规启动哨兵回归，确保有效绝对 `ST_PATH` 不会被测试读取或启动。
+- 更新 `AGENTS.md` 与 `docs/TESTING.md`，明确禁止自动测试读取真实用户配置或启动真实 SillyTavern。
+- 修复后完整本地测试 5/5 通过，`test_manager.sh` 在外部 30 秒上限内正常结束。
 
 ---
 
@@ -114,12 +120,13 @@
 | 分叉、无 upstream、fetch 失败 | 通过 | 未执行 | 待测试 | 待 Termux 实机验证 |
 | 更新历史 | 通过 | 未执行 | 待测试 | 待 Termux 实机验证 |
 | 更新中心菜单 | 集成测试通过 | 未执行 | 待测试 | 待 Termux 实机验证 |
+| 管理器配置隔离 | 毒化配置与启动哨兵回归通过 | 未执行 | 待复测 | 修复完成，待 Termux 回归 |
 
 ---
 
 ## 下一步
 
-执行 Phase 1 UI 修复复测和 Phase 2 Android Termux 实机验收。
+先执行 `test_manager.sh` 配置隔离修复的 Termux 回归；通过前不进入 Phase 3。随后继续 Phase 1 UI 复测和 Phase 2 实机验收。
 
 ---
 
