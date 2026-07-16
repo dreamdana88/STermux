@@ -60,3 +60,16 @@ ui_main_menu() {
     printf '%s\n' '╚══════════════════════════════════╝'
     printf '\nSillyTavern：%s\n\n' "$installation_status"
 }
+
+ui_uninstalled_menu() {
+    ui_clear
+    printf '%s\n' '╔══════════════════════════════════╗'
+    printf '%s\n' '║              STermux             ║'
+    printf '%s\n' '║     仅发布在外神们茶话会社区     ║'
+    printf '%s\n' '╠══════════════════════════════════╣'
+    printf '%s\n' '║ 1. 安装 SillyTavern              ║'
+    printf '%s\n' '║ 2. 设置已有 SillyTavern 路径     ║'
+    printf '%s\n' '║ 0. 退出                          ║'
+    printf '%s\n' '╚══════════════════════════════════╝'
+    printf '\nSillyTavern：未安装\n\n'
+}

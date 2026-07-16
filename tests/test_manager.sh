@@ -35,7 +35,10 @@ create_isolated_project() {
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
         "$target/core/" || return 1
-    cp -- "$PROJECT_ROOT/modules/sillytavern/update.sh" "$target/modules/sillytavern/update.sh" || return 1
+    cp -- \
+        "$PROJECT_ROOT/modules/sillytavern/install.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$target/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$target/config/default.conf" || return 1
 
     # 测试用户配置必须由测试自身创建，严禁复制项目真实 config/user.conf。
@@ -72,7 +75,10 @@ run_user_config_isolation_regression() {
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
         "$poison_source/core/" || return 1
-    cp -- "$PROJECT_ROOT/modules/sillytavern/update.sh" "$poison_source/modules/sillytavern/update.sh" || return 1
+    cp -- \
+        "$PROJECT_ROOT/modules/sillytavern/install.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$poison_source/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$poison_source/config/default.conf" || return 1
 
     printf -v quoted_forbidden_path '%q' "$forbidden_install"
@@ -116,6 +122,7 @@ output="$(printf '1\n\n0\n' | HOME="$test_home" bash "$isolated_project/manager.
 status=$?
 (( status == 0 )) || fail "manager.sh 返回退出码 $status"
 [[ "$output" == *"TEST_MANAGER_LAUNCH_OK"* ]] || fail "未调用 SillyTavern Fixture start.sh"
+[[ "$output" != *"1. 安装 SillyTavern"* ]] || fail "已有 SillyTavern 时仍显示安装入口"
 
 unset ST_PATH
 source "$isolated_project/config/user.conf"
@@ -132,9 +139,12 @@ update_menu_status=$?
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"
 
-empty_output="$(printf '\n0\n' | HOME="$TEST_TMP_ROOT/no-install-home" bash "$empty_project/manager.sh" 2>&1)"
+empty_output="$(printf '0\n' | HOME="$TEST_TMP_ROOT/no-install-home" bash "$empty_project/manager.sh" 2>&1)"
 empty_status=$?
 (( empty_status == 0 )) || fail "无安装流程返回退出码 $empty_status"
+[[ "$empty_output" == *"SillyTavern：未安装"* ]] || fail "无安装环境未显示未安装状态"
+[[ "$empty_output" == *"1. 安装 SillyTavern"* ]] || fail "无安装环境未显示安装入口"
+[[ "$empty_output" == *"2. 设置已有 SillyTavern 路径"* ]] || fail "无安装环境未显示已有路径入口"
 if grep -Eq '^ST_PATH=' "$empty_project/config/user.conf"; then
     fail "取消路径设置后仍写入了 ST_PATH"
 fi

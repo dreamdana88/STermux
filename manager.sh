@@ -28,7 +28,10 @@ load_script_file "$STERMUX_ROOT/core/utils.sh"
 load_script_file "$STERMUX_ROOT/core/config.sh"
 load_script_file "$STERMUX_ROOT/core/ui.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
+load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
+
+SILLYTAVERN_IS_INSTALLED=false
 
 set_sillytavern_path() {
     local candidate="$1"
@@ -96,8 +99,7 @@ detect_sillytavern_path() {
         return 1
     fi
 
-    ui_warning "未找到有效的 SillyTavern 安装。"
-    prompt_for_sillytavern_path
+    return 1
 }
 
 launch_sillytavern() {
@@ -151,12 +153,13 @@ show_main_menu() {
     local installation_status
 
     if sillytavern_path_is_valid "${ST_PATH:-}"; then
+        SILLYTAVERN_IS_INSTALLED=true
         installation_status="已安装：$ST_PATH"
+        ui_main_menu "$installation_status"
     else
-        installation_status="未找到有效安装"
+        SILLYTAVERN_IS_INSTALLED=false
+        ui_uninstalled_menu
     fi
-
-    ui_main_menu "$installation_status"
 }
 
 main_loop() {
@@ -172,27 +175,49 @@ main_loop() {
             return 0
         fi
 
-        case "$choice" in
-            1)
-                launch_sillytavern || true
-                ui_pause
-                ;;
-            2)
-                open_sillytavern_update_center || true
-                ;;
-            6)
-                prompt_for_sillytavern_path || true
-                ui_pause
-                ;;
-            0)
-                ui_info "已退出 STermux。"
-                return 0
-                ;;
-            *)
-                ui_warning "无效选项，请输入 0、1、2 或 6。"
-                ui_pause
-                ;;
-        esac
+        if [[ "$SILLYTAVERN_IS_INSTALLED" == true ]]; then
+            case "$choice" in
+                1)
+                    launch_sillytavern || true
+                    ui_pause
+                    ;;
+                2)
+                    open_sillytavern_update_center || true
+                    ;;
+                6)
+                    prompt_for_sillytavern_path || true
+                    ui_pause
+                    ;;
+                0)
+                    ui_info "已退出 STermux。"
+                    return 0
+                    ;;
+                *)
+                    ui_warning "无效选项，请输入 0、1、2 或 6。"
+                    ui_pause
+                    ;;
+            esac
+        else
+            case "$choice" in
+                1)
+                    if ! sillytavern_install_interactive; then
+                        ui_pause
+                    fi
+                    ;;
+                2)
+                    prompt_for_sillytavern_path || true
+                    ui_pause
+                    ;;
+                0)
+                    ui_info "已退出 STermux。"
+                    return 0
+                    ;;
+                *)
+                    ui_warning "无效选项，请输入 0、1 或 2。"
+                    ui_pause
+                    ;;
+            esac
+        fi
     done
 }
 
