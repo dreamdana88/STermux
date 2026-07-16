@@ -28,6 +28,7 @@ load_script_file "$STERMUX_ROOT/core/utils.sh"
 load_script_file "$STERMUX_ROOT/core/config.sh"
 load_script_file "$STERMUX_ROOT/core/ui.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
+load_script_file "$STERMUX_ROOT/modules/stermux/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
 
@@ -115,6 +116,12 @@ launch_sillytavern() {
     ui_info "正在从以下目录启动 SillyTavern："
     printf '%s\n\n' "$ST_PATH"
 
+    if [[ ! -d "$ST_PATH/node_modules" ]]; then
+        ui_info "SillyTavern 首次启动需要安装 Node Modules。"
+        ui_info "此过程可能需要几分钟，请耐心等待，不要退出 Termux。"
+        printf '\n'
+    fi
+
     (
         cd -- "$ST_PATH" || exit 1
         bash ./start.sh
@@ -147,6 +154,10 @@ open_sillytavern_update_center() {
     fi
 
     sillytavern_update_menu
+}
+
+open_stermux_update_center() {
+    stermux_update_menu
 }
 
 show_main_menu() {
@@ -184,6 +195,9 @@ main_loop() {
                 2)
                     open_sillytavern_update_center || true
                     ;;
+                3)
+                    open_stermux_update_center || true
+                    ;;
                 6)
                     prompt_for_sillytavern_path || true
                     ui_pause
@@ -193,7 +207,7 @@ main_loop() {
                     return 0
                     ;;
                 *)
-                    ui_warning "无效选项，请输入 0、1、2 或 6。"
+                    ui_warning "无效选项，请输入 0、1、2、3 或 6。"
                     ui_pause
                     ;;
             esac
@@ -208,12 +222,15 @@ main_loop() {
                     prompt_for_sillytavern_path || true
                     ui_pause
                     ;;
+                3)
+                    open_stermux_update_center || true
+                    ;;
                 0)
                     ui_info "已退出 STermux。"
                     return 0
                     ;;
                 *)
-                    ui_warning "无效选项，请输入 0、1 或 2。"
+                    ui_warning "无效选项，请输入 0、1、2 或 3。"
                     ui_pause
                     ;;
             esac

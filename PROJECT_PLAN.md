@@ -1750,6 +1750,178 @@ Git 不可用
 
 ---
 
+## Phase 2.6：STermux 自更新
+
+### 目标
+
+让普通用户可以直接在 STermux 菜单中检查和更新 STermux 自身，无需手动执行 `git pull`。
+
+本阶段只实现 STermux 自更新，不进入后续功能阶段。
+
+---
+
+### 菜单入口
+
+主菜单增加独立的：
+
+```text
+STermux 更新
+```
+
+STermux 自更新不得与 SillyTavern 更新中心混合。
+
+---
+
+### 更新检查
+
+通过 STermux 自身 Git 仓库执行：
+
+```text
+确认有效 Git 仓库
+获取当前分支
+获取 upstream
+执行 git fetch
+比较本地 HEAD 与 upstream
+```
+
+必须区分：
+
+```text
+已是最新
+有可用更新
+本地领先
+分支分叉
+无 upstream
+detached HEAD
+Git 命令不可用或损坏
+Git 操作失败
+```
+
+普通用户界面只显示用户状态；Commit、upstream、ahead / behind 放入技术详情和日志。
+
+---
+
+### 执行更新
+
+普通安装仓库使用：
+
+```text
+git pull --ff-only
+```
+
+禁止：
+
+```text
+git reset --hard
+自动删除用户文件
+强制覆盖本地程序文件修改
+```
+
+tracked 程序文件存在本地修改时必须停止自动更新并明确提示。
+
+`config/user.conf`、`data/`、日志等运行时数据不作为程序文件修改，并应通过忽略规则与程序更新隔离。
+
+---
+
+### 更新后自动重启
+
+更新成功后当前 Bash 进程不得继续长期使用旧版函数和模块。
+
+应执行等价于：
+
+```bash
+exec bash "$STERMUX_ROOT/manager.sh"
+```
+
+重新加载最新版 `manager.sh`、`core/` 和 `modules/`。
+
+---
+
+### 异常处理
+
+至少覆盖：
+
+```text
+当前目录不是 Git 仓库
+git 命令不可用或损坏
+没有 upstream
+detached HEAD
+tracked 程序文件存在修改
+本地领先或与远程分叉
+fetch 失败
+pull 失败
+更新成功但重新启动失败
+```
+
+任何异常不得破坏当前 STermux 安装，不得自动执行 `reset --hard`。
+
+---
+
+### 版本显示
+
+项目尚未建立正式版本号体系时显示：
+
+```text
+当前版本：开发版
+```
+
+不得虚构版本号。Git Commit 信息仅在技术详情显示。
+
+未来可以评估 `VERSION` 文件或 Git tag 版本体系，但不在本阶段扩大实现范围。
+
+---
+
+### 自动测试
+
+使用临时本地 Git 仓库，至少覆盖：
+
+```text
+已是最新
+远程有新提交
+更新成功
+tracked 程序文件存在修改时拒绝更新
+分支分叉时拒绝自动更新
+无 upstream
+detached HEAD
+fetch 失败
+pull 失败
+更新后触发重新启动逻辑
+重新启动失败
+```
+
+测试不得操作真实 STermux 仓库、访问真实用户数据或联网依赖 GitHub。
+
+---
+
+### Termux 实机验收
+
+至少验证：
+
+```text
+从主菜单进入独立 STermux 更新页面
+检查真实 upstream 状态
+使用 fast-forward 更新 STermux
+更新成功后自动重新启动 manager.sh
+本地程序修改时拒绝更新
+运行时配置和日志不被覆盖
+```
+
+---
+
+### 完成标准
+
+```text
+1. 普通用户可以从菜单检查 STermux 更新。
+2. 有更新时可以安全执行 fast-forward 更新。
+3. 本地修改、分叉及 Git 异常不会被强制覆盖。
+4. 用户运行时配置和日志不会被程序更新覆盖。
+5. 更新成功后自动重新加载最新版程序。
+6. 自动测试全部通过。
+7. Android Termux 实机完成一次真实自更新验收。
+```
+
+---
+
 ## Phase 3：第三方扩展更新
 
 实现：

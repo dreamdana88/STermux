@@ -540,6 +540,7 @@ Termux 实机测试：待验证
 13. 管理器集成测试必须设置违规启动哨兵，证明来源用户配置中的真实或仿真绝对 `ST_PATH` 不会被访问。
 14. SillyTavern 安装测试不得访问真实网络或调用真实 `pkg`，只能使用 Mock 软件包命令与本地临时 Git 仓库。
 15. 安装成功、失败、目录冲突和残留目录测试只能写入当前测试临时根目录。
+16. STermux 自更新测试不得修改真实项目仓库、访问 GitHub 或真实执行 `manager.sh` 重启，必须使用临时 Git 仓库和重启 Mock。
 
 ---
 
@@ -746,6 +747,14 @@ Termux 实机验证通过
 - Mock `pkg` 与本地临时 Git 仓库安装流程测试
 - 目标目录冲突、失败隔离和 `ST_PATH` 保存测试
 - 纯净 Termux 设备真实从零安装与首次启动验收
+
+### Phase 2.6
+
+- Bash 语法检查
+- 临时 Git 仓库状态、fetch 与 `pull --ff-only` 测试
+- tracked 程序修改、分叉、无 upstream 和 detached HEAD 拒绝测试
+- fetch、pull 与重启失败隔离测试
+- Android Termux 真实 STermux 自更新和自动重启验收
 
 ### Phase 3
 

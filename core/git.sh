@@ -173,3 +173,9 @@ git_pull_rebase_autostash() {
 
     git_run_network_command "$repository" pull --rebase --autostash
 }
+
+git_pull_ff_only() {
+    local repository="$1"
+
+    git_run_network_command "$repository" pull --ff-only
+}

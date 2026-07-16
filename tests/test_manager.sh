@@ -27,7 +27,7 @@ fail() {
 create_isolated_project() {
     local target="$1"
 
-    mkdir -p -- "$target/core" "$target/config" "$target/modules/sillytavern" || return 1
+    mkdir -p -- "$target/core" "$target/config" "$target/modules/sillytavern" "$target/modules/stermux" || return 1
     cp -- "$PROJECT_ROOT/manager.sh" "$target/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
@@ -39,6 +39,7 @@ create_isolated_project() {
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
         "$target/modules/sillytavern/" || return 1
+    cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$target/modules/stermux/update.sh" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$target/config/default.conf" || return 1
 
     # 测试用户配置必须由测试自身创建，严禁复制项目真实 config/user.conf。
@@ -67,7 +68,8 @@ run_user_config_isolation_regression() {
 
     [[ "${STERMUX_TEST_ISOLATION_GUARD:-0}" == "1" ]] && return 0
 
-    mkdir -p -- "$poison_source/core" "$poison_source/config" "$poison_source/modules/sillytavern" || return 1
+    mkdir -p -- "$poison_source/core" "$poison_source/config" \
+        "$poison_source/modules/sillytavern" "$poison_source/modules/stermux" || return 1
     cp -- "$PROJECT_ROOT/manager.sh" "$poison_source/manager.sh" || return 1
     cp -- \
         "$PROJECT_ROOT/core/config.sh" \
@@ -79,6 +81,7 @@ run_user_config_isolation_regression() {
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
         "$poison_source/modules/sillytavern/" || return 1
+    cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$poison_source/modules/stermux/update.sh" || return 1
     cp -- "$PROJECT_ROOT/config/default.conf" "$poison_source/config/default.conf" || return 1
 
     printf -v quoted_forbidden_path '%q' "$forbidden_install"
@@ -123,6 +126,8 @@ status=$?
 (( status == 0 )) || fail "manager.sh 返回退出码 $status"
 [[ "$output" == *"TEST_MANAGER_LAUNCH_OK"* ]] || fail "未调用 SillyTavern Fixture start.sh"
 [[ "$output" != *"1. 安装 SillyTavern"* ]] || fail "已有 SillyTavern 时仍显示安装入口"
+[[ "$output" == *"SillyTavern 首次启动需要安装 Node Modules"* ]] || fail "首次启动缺少 Node Modules 耗时提示"
+[[ "$output" == *"此过程可能需要几分钟"* ]] || fail "首次启动缺少耐心等待提示"
 
 unset ST_PATH
 source "$isolated_project/config/user.conf"
@@ -135,6 +140,13 @@ update_menu_status=$?
 [[ "$update_menu_output" == *"更新状态"* ]] || fail "主菜单未进入更新中心"
 [[ "$update_menu_output" == *"4. 查看技术详情"* ]] || fail "更新中心缺少技术详情入口"
 [[ "$update_menu_output" == *"Upstream"* ]] || fail "技术详情未显示 Upstream"
+
+self_update_output="$(printf '3\n3\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+self_update_status=$?
+(( self_update_status == 0 )) || fail "STermux 更新菜单返回退出码 $self_update_status"
+[[ "$self_update_output" == *"STermux 更新"* ]] || fail "主菜单未进入 STermux 更新页面"
+[[ "$self_update_output" == *"当前版本：开发版"* ]] || fail "STermux 更新页面缺少开发版显示"
+[[ "$self_update_output" == *"STermux 更新技术详情"* ]] || fail "STermux 更新页面缺少技术详情"
 
 empty_project="$TEST_TMP_ROOT/empty-project"
 create_isolated_project "$empty_project" || fail "无法创建空安装隔离项目"

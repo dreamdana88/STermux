@@ -1,2 +1,4 @@
 # Runtime state
 data/state/*.log
+data/logs/*.log
+config/user.conf
