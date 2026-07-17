@@ -11,6 +11,8 @@ EXTENSION_FAILED_COUNT=0
 EXTENSION_BATCH_SUCCESS=0
 EXTENSION_BATCH_FAILED=0
 EXTENSION_BATCH_SKIPPED=0
+EXTENSION_DELETE_SUCCESS=0
+EXTENSION_DELETE_FAILED=0
 
 declare -a EXTENSION_NAMES=()
 declare -a EXTENSION_PATHS=()
@@ -24,6 +26,8 @@ declare -a EXTENSION_ERRORS=()
 declare -a EXTENSION_SELECTED_INDEXES=()
 declare -a EXTENSION_BATCH_FAILED_NAMES=()
 declare -a EXTENSION_BATCH_FAILED_ERRORS=()
+declare -a EXTENSION_DELETE_FAILED_NAMES=()
+declare -a EXTENSION_DELETE_FAILED_ERRORS=()
 
 sillytavern_extensions_root() {
     printf '%s\n' "$ST_PATH/public/scripts/extensions/third-party"
@@ -114,6 +118,108 @@ sillytavern_extension_policy_set() {
         return 1
     fi
     return 0
+}
+
+sillytavern_extension_delete_path_is_safe() {
+    local index="$1" root target root_canonical target_canonical parent_canonical
+
+    (( index >= 0 && index < EXTENSION_TOTAL_COUNT )) || return 1
+    root="$(sillytavern_extensions_root)"
+    target="${EXTENSION_PATHS[index]}"
+    [[ -n "$root" && -d "$root" && ! -L "$root" ]] || return 1
+    [[ -n "$target" && -d "$target" && ! -L "$target" ]] || return 1
+    [[ "$(basename -- "$target")" == "${EXTENSION_NAMES[index]}" ]] || return 1
+    root_canonical="$(path_canonicalize_directory "$root")" || return 1
+    target_canonical="$(path_canonicalize_directory "$target")" || return 1
+    parent_canonical="$(path_canonicalize_directory "$(dirname -- "$target")")" || return 1
+    [[ "$parent_canonical" == "$root_canonical" ]] || return 1
+    [[ "$target_canonical" == "$root_canonical/"* && "$target_canonical" != "$root_canonical" ]] || return 1
+    [[ "$target_canonical" != "/" && "$target_canonical" != "${HOME:-}" \
+        && "$target_canonical" != "${ST_PATH:-}" && "$target_canonical" != "$STERMUX_ROOT" ]] || return 1
+}
+
+sillytavern_extension_remove_directory() {
+    rm -rf -- "$1"
+}
+
+sillytavern_extension_delete_index() {
+    local index="$1" name path
+
+    (( index >= 0 && index < EXTENSION_TOTAL_COUNT )) || return 1
+    name="${EXTENSION_NAMES[index]}"
+    path="${EXTENSION_PATHS[index]}"
+    if ! sillytavern_extension_delete_path_is_safe "$index"; then
+        EXTENSION_ERRORS[index]="扩展路径越界、不安全或为符号链接"
+        sillytavern_extension_log_result "$name" unknown unknown delete_failed \
+            "${EXTENSION_ERRORS[index]}" || true
+        return 1
+    fi
+    if ! sillytavern_extension_remove_directory "$path" || [[ -e "$path" || -L "$path" ]]; then
+        EXTENSION_ERRORS[index]="扩展目录删除失败"
+        sillytavern_extension_log_result "$name" unknown unknown delete_failed \
+            "${EXTENSION_ERRORS[index]}" || true
+        return 1
+    fi
+    if sillytavern_extension_name_is_policy_safe "$name" \
+        && ! sillytavern_extension_policy_set "$name" auto; then
+        EXTENSION_ERRORS[index]="扩展已删除，但 manual 策略清理失败"
+        sillytavern_extension_log_result "$name" unknown unknown delete_failed \
+            "${EXTENSION_ERRORS[index]}" || true
+        return 1
+    fi
+    sillytavern_extension_log_result "$name" unknown unknown delete_success "" || true
+    return 0
+}
+
+sillytavern_extension_delete_selected() {
+    local index name
+
+    EXTENSION_DELETE_SUCCESS=0
+    EXTENSION_DELETE_FAILED=0
+    EXTENSION_DELETE_FAILED_NAMES=()
+    EXTENSION_DELETE_FAILED_ERRORS=()
+    for index in "$@"; do
+        if (( index < 0 || index >= EXTENSION_TOTAL_COUNT )); then
+            EXTENSION_DELETE_FAILED=$((EXTENSION_DELETE_FAILED + 1))
+            EXTENSION_DELETE_FAILED_NAMES+=("未知编号")
+            EXTENSION_DELETE_FAILED_ERRORS+=("扩展编号已失效")
+            continue
+        fi
+        name="${EXTENSION_NAMES[index]}"
+        if sillytavern_extension_delete_index "$index"; then
+            EXTENSION_DELETE_SUCCESS=$((EXTENSION_DELETE_SUCCESS + 1))
+        else
+            EXTENSION_DELETE_FAILED=$((EXTENSION_DELETE_FAILED + 1))
+            EXTENSION_DELETE_FAILED_NAMES+=("$name")
+            EXTENSION_DELETE_FAILED_ERRORS+=("${EXTENSION_ERRORS[index]:-删除失败}")
+        fi
+    done
+}
+
+sillytavern_extension_delete_interactive() {
+    local confirm index
+
+    sillytavern_extension_prompt_selection \
+        '请输入扩展编号（支持空格或逗号分隔）：' true || return 1
+    printf '\n即将永久删除：\n\n'
+    for index in "${EXTENSION_SELECTED_INDEXES[@]}"; do
+        printf -- '- %s\n' "${EXTENSION_NAMES[index]}"
+    done
+    printf '\n删除后需要重新安装才能恢复扩展程序。\n'
+    printf '确认删除？[y/N] '
+    IFS= read -r confirm || return 0
+    if [[ "$confirm" != y && "$confirm" != Y ]]; then
+        ui_info "已取消扩展删除。"
+        return 0
+    fi
+    sillytavern_extension_delete_selected "${EXTENSION_SELECTED_INDEXES[@]}"
+    printf '\n删除完成\n\n成功：%s\n失败：%s\n' \
+        "$EXTENSION_DELETE_SUCCESS" "$EXTENSION_DELETE_FAILED"
+    for ((index = 0; index < ${#EXTENSION_DELETE_FAILED_NAMES[@]}; index++)); do
+        ui_error "${EXTENSION_DELETE_FAILED_NAMES[index]}：${EXTENSION_DELETE_FAILED_ERRORS[index]}"
+    done
+    sillytavern_extensions_scan || true
+    (( EXTENSION_DELETE_FAILED == 0 ))
 }
 
 sillytavern_extensions_reset_inventory() {
@@ -686,8 +792,9 @@ sillytavern_extensions_menu() {
         printf '6. 取消仅手动更新\n'
         printf '7. 查看当前更新策略\n'
         printf '8. 查看扩展技术详情\n'
+        printf '9. 删除扩展\n'
         printf '0. 返回主菜单\n\n'
-        ui_menu_prompt '0-8'
+        ui_menu_prompt '0-9'
         IFS= read -r choice || return 0
 
         case "$choice" in
@@ -729,11 +836,15 @@ sillytavern_extensions_menu() {
                 sillytavern_extension_show_details_interactive || true
                 ui_pause
                 ;;
+            9)
+                sillytavern_extension_delete_interactive || true
+                ui_pause
+                ;;
             0)
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0 到 8。"
+                ui_warning "无效选项，请输入 0 到 9。"
                 ui_pause
                 ;;
         esac

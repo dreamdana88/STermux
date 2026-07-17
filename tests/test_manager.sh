@@ -33,6 +33,7 @@ create_isolated_project() {
         "$PROJECT_ROOT/core/config.sh" \
         "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
+        "$PROJECT_ROOT/core/uninstall.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
@@ -85,6 +86,7 @@ run_user_config_isolation_regression() {
         "$PROJECT_ROOT/core/config.sh" \
         "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
+        "$PROJECT_ROOT/core/uninstall.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
         "$PROJECT_ROOT/core/utils.sh" \
@@ -192,6 +194,7 @@ settings_status=$?
 [[ "$settings_output" == *"3. 颜色显示：已开启"* ]] || fail "设置菜单未显示颜色状态"
 [[ "$settings_output" == *"4. 查看当前 SillyTavern 路径"* ]] || fail "设置菜单缺少路径信息入口"
 [[ "$settings_output" == *"5. 查看 STermux 版本信息"* ]] || fail "设置菜单缺少版本信息入口"
+[[ "$settings_output" == *"6. 卸载管理"* ]] || fail "设置菜单缺少卸载管理入口"
 [[ "$settings_output" == *"当前 SillyTavern 路径："* ]] || fail "设置页面无法查看当前路径"
 [[ "$settings_output" == *"STermux 版本：v0.0.1"* ]] || fail "设置页面无法查看 STermux 版本"
 [[ "$settings_output" != *"[路径]"* && "$settings_output" != *"[启动]"* ]] \

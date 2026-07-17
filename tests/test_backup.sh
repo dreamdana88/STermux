@@ -48,7 +48,7 @@ AUTOMATIC_BACKUP_KEEP=2
 TEST_BACKUP_EPOCH=100
 THIRD_PARTY_DIR="$ST_PATH/public/scripts/extensions/third-party"
 
-mkdir -p -- "$STERMUX_ROOT/data/logs" "$ST_PATH/data/default-user/chats" \
+mkdir -p -- "$STERMUX_ROOT/data/logs" "$STERMUX_ROOT/config" "$ST_PATH/data/default-user/chats" \
     "$THIRD_PARTY_DIR/GitExtension" || exit 1
 printf '%s\n' '#!/usr/bin/env bash' > "$ST_PATH/start.sh"
 printf '%s\n' '// fixture' > "$ST_PATH/server.js"
@@ -61,11 +61,16 @@ printf '%s\n' 'hidden extension setting' > "$THIRD_PARTY_DIR/GitExtension/.hidde
 printf '%s\n' 'root hidden file' > "$THIRD_PARTY_DIR/.backup-hidden"
 
 source "$PROJECT_ROOT/core/utils.sh"
+source "$PROJECT_ROOT/core/config.sh"
 source "$PROJECT_ROOT/core/ui.sh"
 source "$PROJECT_ROOT/core/git.sh"
 source "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh"
 source "$PROJECT_ROOT/core/backup.sh"
 ui_initialize
+
+unset AUTOMATIC_BACKUP_KEEP
+[[ "$(backup_automatic_keep_value)" == 2 ]] || fail "旧配置缺少保留字段时未回退到 2"
+AUTOMATIC_BACKUP_KEEP=2
 
 backup_current_epoch() { printf '%s\n' "$TEST_BACKUP_EPOCH"; }
 backup_current_display_time() { printf 'test-time-%s\n' "$TEST_BACKUP_EPOCH"; }
@@ -169,6 +174,61 @@ backup_delete_selected "$failure_index" "$after_failure_index"
 [[ "$BACKUP_DELETE_FAILED" == 1 && "$BACKUP_DELETE_SUCCESS" == 1 ]] || fail "单项删除失败未与后续项隔离"
 [[ -d "$FAILURE_PATH" && ! -e "$AFTER_FAILURE_PATH" ]] || fail "失败隔离后的目录状态错误"
 backup_remove_directory() { rm -rf -- "$1"; }
+
+keep_before="$(backup_automatic_keep_value)"
+for invalid_keep in '' text 0 -1 21; do
+    if backup_set_automatic_keep "$invalid_keep" </dev/null >/dev/null 2>&1; then
+        fail "非法自动备份数量被接受：$invalid_keep"
+    fi
+    [[ "$(backup_automatic_keep_value)" == "$keep_before" ]] || fail "非法输入修改了保留配置"
+done
+
+backup_set_automatic_keep 5 </dev/null || fail "提高自动备份上限到 5 失败：$BACKUP_LAST_ERROR"
+[[ "$(backup_automatic_keep_value)" == 5 ]] || fail "自动备份上限未设置为 5"
+grep -Fxq 'AUTOMATIC_BACKUP_KEEP=5' "$STERMUX_ROOT/config/user.conf" \
+    || fail "自动备份上限 5 未持久化"
+AUTOMATIC_BEFORE_GROWTH="$(automatic_count)"
+create_backup_at 910 protective "keep setting protective" || fail "无法创建上限测试 protective"
+create_backup_at 920 scheduled "keep setting scheduled" || fail "无法创建上限测试 scheduled"
+create_backup_at 930 catchup "keep setting catchup" || fail "无法创建上限测试 catchup"
+[[ "$(automatic_count)" == $((AUTOMATIC_BEFORE_GROWTH + 3)) ]] \
+    || fail "提高上限时自动备份池计数错误"
+
+manual_count_before_lower=0
+backup_inventory_scan || fail "降低上限前扫描失败"
+for backup_type in "${BACKUP_TYPES[@]}"; do
+    [[ "$backup_type" == manual ]] && manual_count_before_lower=$((manual_count_before_lower + 1))
+done
+count_before_cancel="$(automatic_count)"
+cancel_keep_status=0
+backup_set_automatic_keep 2 <<< '' >/dev/null || cancel_keep_status=$?
+[[ "$cancel_keep_status" == 2 ]] || fail "降低上限默认 N 未取消"
+[[ "$(backup_automatic_keep_value)" == 5 ]] || fail "取消降低上限后配置发生变化"
+[[ "$(automatic_count)" == "$count_before_cancel" ]] || fail "取消降低上限后备份被删除"
+
+backup_set_automatic_keep 2 <<< 'y' >/dev/null \
+    || fail "确认降低上限后轮换失败：$BACKUP_LAST_ERROR"
+[[ "$(backup_automatic_keep_value)" == 2 ]] || fail "降低后的上限未保存为 2"
+[[ "$(automatic_count)" == 2 ]] || fail "降低上限后未立即保留最新 2 份"
+backup_inventory_scan || fail "降低上限后扫描失败"
+manual_count_after_lower=0
+automatic_types=""
+for backup_type in "${BACKUP_TYPES[@]}"; do
+    if [[ "$backup_type" == manual ]]; then
+        manual_count_after_lower=$((manual_count_after_lower + 1))
+    else
+        automatic_types+="$backup_type "
+    fi
+done
+[[ "$manual_count_after_lower" == "$manual_count_before_lower" ]] \
+    || fail "降低上限时 manual 被计数或删除"
+[[ "$automatic_types" == *"scheduled"* && "$automatic_types" == *"catchup"* ]] \
+    || fail "三类自动备份未按时间统一排序保留最新项目"
+
+backup_set_automatic_keep 1 <<< 'y' >/dev/null \
+    || fail "设置自动备份上限为 1 失败：$BACKUP_LAST_ERROR"
+[[ "$(automatic_count)" == 1 ]] || fail "上限 1 未立即生效"
+backup_set_automatic_keep 2 </dev/null || fail "恢复测试默认上限 2 失败"
 
 OUTSIDE_PATH="$TEST_TMP_ROOT/outside-backup"
 mkdir -p -- "$OUTSIDE_PATH"

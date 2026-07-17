@@ -66,6 +66,18 @@ source "$TEST_TMP_ROOT/config/user.conf"
 [[ "$COLOR_ENABLED" == false ]] || fail "保存后的颜色设置不一致"
 [[ "$ST_PATH" == "$expected_path" ]] || fail "保存颜色设置时破坏了 ST_PATH"
 
+config_set_value "AUTOMATIC_BACKUP_KEEP" "5" || fail "无法保存自动备份保留数量"
+unset AUTOMATIC_BACKUP_KEEP
+source "$TEST_TMP_ROOT/config/user.conf"
+[[ "$AUTOMATIC_BACKUP_KEEP" == 5 ]] || fail "自动备份保留数量未持久化"
+
+config_remove_value "ST_PATH" || fail "无法移除保存的 ST_PATH"
+if grep -Eq '^ST_PATH=' "$TEST_TMP_ROOT/config/user.conf"; then
+    fail "移除 ST_PATH 后用户配置仍保留该项"
+fi
+grep -Fxq 'AUTOMATIC_BACKUP_KEEP=5' "$TEST_TMP_ROOT/config/user.conf" \
+    || fail "移除 ST_PATH 时破坏了其他配置"
+
 if config_set_value "UNKNOWN_SETTING" "value" >/dev/null 2>&1; then
     fail "未知配置项未被拒绝"
 fi

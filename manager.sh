@@ -31,6 +31,7 @@ load_script_file "$STERMUX_ROOT/core/version.sh"
 load_script_file "$STERMUX_ROOT/core/autostart.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
 load_script_file "$STERMUX_ROOT/core/backup.sh"
+load_script_file "$STERMUX_ROOT/core/uninstall.sh"
 load_script_file "$STERMUX_ROOT/modules/stermux/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/backup-rules.sh"
@@ -303,8 +304,9 @@ settings_menu() {
         printf '\n3. 颜色显示：%s\n' "$(settings_color_status_text)"
         printf '\n4. 查看当前 SillyTavern 路径\n'
         printf '5. 查看 STermux 版本信息\n'
+        printf '6. 卸载管理\n'
         printf '\n0. 返回主菜单\n\n'
-        ui_menu_prompt '0-5'
+        ui_menu_prompt '0-6'
         IFS= read -r choice || return 0
         case "$choice" in
             1)
@@ -327,11 +329,15 @@ settings_menu() {
                 settings_show_version
                 ui_pause
                 ;;
+            6)
+                uninstall_manager_menu || true
+                ui_pause
+                ;;
             0)
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0 到 5。"
+                ui_warning "无效选项，请输入 0 到 6。"
                 ui_pause
                 ;;
         esac

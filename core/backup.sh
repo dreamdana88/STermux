@@ -66,6 +66,16 @@ backup_type_display() {
     esac
 }
 
+backup_automatic_keep_value() {
+    local keep="${AUTOMATIC_BACKUP_KEEP:-2}"
+
+    if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep >= 1 && keep <= 20 )); then
+        printf '%s\n' "$keep"
+    else
+        printf '%s\n' 2
+    fi
+}
+
 backup_metadata_get() {
     local file="$1"
     local key="$2"
@@ -423,9 +433,9 @@ backup_delete_path() {
 }
 
 backup_rotate_automatic() {
-    local keep="${AUTOMATIC_BACKUP_KEEP:-2}" index automatic_seen=0 failed=0 last_error=""
+    local keep index automatic_seen=0 failed=0 last_error=""
 
-    [[ "$keep" =~ ^[1-9][0-9]*$ ]] || keep=2
+    keep="$(backup_automatic_keep_value)"
     backup_inventory_scan || return 1
     for ((index = 0; index < ${#BACKUP_IDS[@]}; index++)); do
         if backup_type_is_automatic "${BACKUP_TYPES[index]}"; then
@@ -442,6 +452,84 @@ backup_rotate_automatic() {
         BACKUP_LAST_ERROR="自动备份池有 $failed 个旧备份清理失败：$last_error"
         return 1
     fi
+}
+
+backup_automatic_count() {
+    local index count=0
+
+    backup_inventory_scan || return 1
+    for ((index = 0; index < ${#BACKUP_TYPES[@]}; index++)); do
+        backup_type_is_automatic "${BACKUP_TYPES[index]}" && count=$((count + 1))
+    done
+    printf '%s\n' "$count"
+}
+
+backup_set_automatic_keep() {
+    local new_keep="$1" current_keep automatic_count cleanup_count confirm
+
+    [[ "$new_keep" =~ ^[0-9]+$ ]] && (( new_keep >= 1 && new_keep <= 20 )) || {
+        BACKUP_LAST_ERROR="最大自动备份数量必须是 1 到 20 的整数"
+        return 1
+    }
+    current_keep="$(backup_automatic_keep_value)"
+    automatic_count="$(backup_automatic_count)" || return 1
+    if (( automatic_count > new_keep )); then
+        cleanup_count=$((automatic_count - new_keep))
+        printf '\n当前自动备份数量：%s\n' "$automatic_count"
+        printf '新的最大保留数量：%s\n' "$new_keep"
+        printf '将清理最旧备份：%s\n\n' "$cleanup_count"
+        printf '手动备份不会受到影响。\n'
+        printf '确认修改并清理旧备份？[y/N] '
+        IFS= read -r confirm || return 2
+        if [[ "$confirm" != y && "$confirm" != Y ]]; then
+            return 2
+        fi
+    fi
+    if ! config_set_value AUTOMATIC_BACKUP_KEEP "$new_keep"; then
+        BACKUP_LAST_ERROR="无法保存最大自动备份数量"
+        return 1
+    fi
+    AUTOMATIC_BACKUP_KEEP="$new_keep"
+    if (( automatic_count > new_keep )); then
+        backup_rotate_automatic || return 1
+    fi
+    backup_log settings success "automatic-keep" "$current_keep->$new_keep" || true
+    return 0
+}
+
+backup_automatic_settings_menu() {
+    local choice input status
+
+    while true; do
+        ui_clear
+        ui_page_header '自动备份保留设置'
+        printf '\n最大自动备份数量：%s 份\n\n' "$(backup_automatic_keep_value)"
+        printf '1. 设置最大自动备份数量\n\n'
+        printf '0. 返回\n\n'
+        ui_menu_prompt '0-1'
+        IFS= read -r choice || return 0
+        case "$choice" in
+            1)
+                printf '请输入新的最大数量 [1-20]：'
+                IFS= read -r input || input=""
+                status=0
+                backup_set_automatic_keep "$input" || status=$?
+                case "$status" in
+                    0) ui_success "最大自动备份数量已设置为 $(backup_automatic_keep_value) 份。" ;;
+                    2) ui_info "已取消修改，配置和备份均未改变。" ;;
+                    *) ui_error "$BACKUP_LAST_ERROR" ;;
+                esac
+                ui_pause
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                ui_warning '无效选项，请输入 0 或 1。'
+                ui_pause
+                ;;
+        esac
+    done
 }
 
 backup_size_display() {
@@ -794,8 +882,8 @@ backup_menu() {
     while true; do
         ui_clear
         ui_page_header '备份与恢复'
-        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n\n0. 返回主菜单\n\n'
-        ui_menu_prompt '0-5'
+        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n6. 自动备份保留设置\n\n0. 返回主菜单\n\n'
+        ui_menu_prompt '0-6'
         IFS= read -r choice || return 0
         case "$choice" in
             1) if backup_create manual "user-request"; then ui_success "手动备份创建成功：$(basename -- "$BACKUP_LAST_PATH")"; else ui_error "$BACKUP_LAST_ERROR"; fi; ui_pause ;;
@@ -803,8 +891,9 @@ backup_menu() {
             3) backup_restore_interactive || true; ui_pause ;;
             4) backup_delete_interactive false || true; ui_pause ;;
             5) backup_delete_interactive true || true; ui_pause ;;
+            6) backup_automatic_settings_menu ;;
             0) return 0 ;;
-            *) ui_warning "无效选项，请输入 0 到 5。"; ui_pause ;;
+            *) ui_warning "无效选项，请输入 0 到 6。"; ui_pause ;;
         esac
     done
 }

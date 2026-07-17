@@ -59,14 +59,29 @@ ui_display_width() {
     local character
     local width=0
     local index
+    local byte_value
+    local byte_length=1
+    local LC_ALL=C
 
     text="$(ui_strip_ansi "$1")"
     for ((index = 0; index < ${#text}; index++)); do
         character="${text:index:1}"
-        if [[ "$character" == [\ -~] ]]; then
+        printf -v byte_value '%d' "'$character"
+        (( byte_value >= 0 )) || byte_value=$((byte_value + 256))
+        if (( byte_value >= 32 && byte_value <= 126 )); then
             width=$((width + 1))
         else
             width=$((width + 2))
+            if (( byte_value >= 240 )); then
+                byte_length=4
+            elif (( byte_value >= 224 )); then
+                byte_length=3
+            elif (( byte_value >= 192 )); then
+                byte_length=2
+            else
+                byte_length=1
+            fi
+            index=$((index + byte_length - 1))
         fi
     done
     printf '%s\n' "$width"

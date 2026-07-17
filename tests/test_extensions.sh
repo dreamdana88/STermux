@@ -100,6 +100,7 @@ git_quiet -C "$FETCH_FAILURE_PATH" remote set-url origin \
 mkdir -p -- "$EXTENSIONS_ROOT/NonGit/nested-extension" || fail "无法创建非 Git 扩展 Fixture"
 
 GIT_NETWORK_TIMEOUT_SECONDS=10
+source "$PROJECT_ROOT/core/utils.sh"
 source "$PROJECT_ROOT/core/git.sh"
 source "$PROJECT_ROOT/core/ui.sh"
 source "$PROJECT_ROOT/modules/sillytavern/extensions.sh"
@@ -187,8 +188,87 @@ log_file="$(sillytavern_extension_log_file)"
 grep -Fq $'A-Failure\t' "$log_file" || fail "扩展失败日志缺少名称"
 grep -Fq $'success\t-' "$log_file" || fail "扩展成功日志缺少结果"
 
+create_git_extension "delete-git" "DeleteGit" || fail "无法创建待删除 Git 扩展"
+DELETE_GIT_PATH="$LAST_EXTENSION_PATH"
+mkdir -p -- "$EXTENSIONS_ROOT/DeleteNonGit" "$EXTENSIONS_ROOT/DeleteFailure" \
+    "$EXTENSIONS_ROOT/DeleteAfterFailure" || fail "无法创建扩展删除 Fixture"
+printf '%s\n' delete > "$EXTENSIONS_ROOT/DeleteNonGit/index.js"
+printf '%s\n' keep > "$EXTENSIONS_ROOT/DeleteFailure/index.js"
+printf '%s\n' delete > "$EXTENSIONS_ROOT/DeleteAfterFailure/index.js"
+sillytavern_extension_policy_set DeleteGit manual || fail "无法准备待清理 manual 策略"
+sillytavern_extensions_scan || fail "扩展删除前扫描失败"
+
+delete_git_index="$(extension_index_by_name DeleteGit)" || fail "无法定位待删除 Git 扩展"
+cancel_output="$(printf '%s\n\n' "$((delete_git_index + 1))" | \
+    sillytavern_extension_delete_interactive 2>&1)"
+[[ "$cancel_output" == *"已取消扩展删除"* ]] || fail "扩展删除默认 N 未取消"
+[[ -d "$DELETE_GIT_PATH" ]] || fail "取消后 Git 扩展仍被删除"
+
+sillytavern_extension_delete_selected "$delete_git_index"
+[[ "$EXTENSION_DELETE_SUCCESS" == 1 && "$EXTENSION_DELETE_FAILED" == 0 ]] \
+    || fail "单个 Git 扩展删除结果错误"
+[[ ! -e "$DELETE_GIT_PATH" ]] || fail "单个 Git 扩展未删除"
+[[ "$(sillytavern_extension_policy_get DeleteGit)" == auto ]] \
+    || fail "扩展删除后 manual 策略未同步清理"
+
+sillytavern_extensions_scan || fail "非 Git 删除前扫描失败"
+delete_non_git_index="$(extension_index_by_name DeleteNonGit)" || fail "无法定位待删除非 Git 扩展"
+sillytavern_extension_delete_selected "$delete_non_git_index"
+[[ ! -e "$EXTENSIONS_ROOT/DeleteNonGit" ]] || fail "单个非 Git 扩展未删除"
+
+sillytavern_extensions_scan || fail "批量删除前扫描失败"
+delete_failure_index="$(extension_index_by_name DeleteFailure)" || fail "无法定位删除失败扩展"
+delete_after_index="$(extension_index_by_name DeleteAfterFailure)" || fail "无法定位失败后扩展"
+sillytavern_extension_parse_selection \
+    "$((delete_failure_index + 1)),$((delete_after_index + 1)) $((delete_after_index + 1)) invalid 999" \
+    || fail "扩展删除多选解析失败"
+[[ "${#EXTENSION_SELECTED_INDEXES[@]}" == 2 ]] || fail "扩展删除多选未过滤非法编号或去重"
+sillytavern_extension_remove_directory() {
+    [[ "$1" == "$EXTENSIONS_ROOT/DeleteFailure" ]] && return 1
+    rm -rf -- "$1"
+}
+sillytavern_extension_delete_selected "${EXTENSION_SELECTED_INDEXES[@]}"
+[[ "$EXTENSION_DELETE_FAILED" == 1 && "$EXTENSION_DELETE_SUCCESS" == 1 ]] \
+    || fail "扩展删除失败未与后续项目隔离"
+[[ -d "$EXTENSIONS_ROOT/DeleteFailure" && ! -e "$EXTENSIONS_ROOT/DeleteAfterFailure" ]] \
+    || fail "扩展删除失败隔离后的目录状态错误"
+sillytavern_extension_remove_directory() { rm -rf -- "$1"; }
+
+OUTSIDE_EXTENSION="$TEST_TMP_ROOT/outside-extension"
+mkdir -p -- "$OUTSIDE_EXTENSION"
+printf '%s\n' outside > "$OUTSIDE_EXTENSION/sentinel.txt"
+sillytavern_extensions_scan || fail "越界测试前扫描失败"
+safe_index="$(extension_index_by_name DeleteFailure)" || fail "无法定位越界测试扩展"
+original_path="${EXTENSION_PATHS[safe_index]}"
+original_name="${EXTENSION_NAMES[safe_index]}"
+EXTENSION_PATHS[safe_index]="$OUTSIDE_EXTENSION"
+EXTENSION_NAMES[safe_index]="$(basename -- "$OUTSIDE_EXTENSION")"
+if sillytavern_extension_delete_index "$safe_index"; then fail "third-party 外扩展被允许删除"; fi
+[[ -f "$OUTSIDE_EXTENSION/sentinel.txt" ]] || fail "扩展越界保护破坏外部数据"
+EXTENSION_PATHS[safe_index]="$EXTENSIONS_ROOT/../$(basename -- "$OUTSIDE_EXTENSION")"
+if sillytavern_extension_delete_index "$safe_index"; then fail "路径穿越目标被允许删除"; fi
+[[ -f "$OUTSIDE_EXTENSION/sentinel.txt" ]] || fail "路径穿越保护破坏外部数据"
+EXTENSION_PATHS[safe_index]="$EXTENSIONS_ROOT"
+EXTENSION_NAMES[safe_index]="$(basename -- "$EXTENSIONS_ROOT")"
+if sillytavern_extension_delete_index "$safe_index"; then fail "third-party 根目录被允许删除"; fi
+[[ -d "$EXTENSIONS_ROOT" ]] || fail "third-party 根目录被破坏"
+EXTENSION_PATHS[safe_index]="$original_path"
+EXTENSION_NAMES[safe_index]="$original_name"
+
+if ln -s "$OUTSIDE_EXTENSION" "$EXTENSIONS_ROOT/EscapeLink" 2>/dev/null \
+    && [[ -L "$EXTENSIONS_ROOT/EscapeLink" ]]; then
+    sillytavern_extensions_scan || fail "符号链接测试前扫描失败"
+    escape_index="$(extension_index_by_name EscapeLink)" || fail "扫描未包含符号链接 Fixture"
+    if sillytavern_extension_delete_index "$escape_index"; then fail "符号链接逃逸扩展被允许删除"; fi
+    [[ -f "$OUTSIDE_EXTENSION/sentinel.txt" ]] || fail "符号链接逃逸破坏外部数据"
+fi
+grep -Fq $'DeleteGit\tunknown\tunknown\tdelete_success' "$log_file" \
+    || fail "扩展删除成功未写入现有扩展日志"
+grep -Fq $'DeleteFailure\tunknown\tunknown\tdelete_failed' "$log_file" \
+    || fail "扩展删除失败未写入现有扩展日志"
+
 ST_PATH="$TEST_TMP_ROOT/Empty SillyTavern"
 sillytavern_extensions_scan || fail "扩展目录不存在时不应致命失败"
 [[ "$EXTENSION_TOTAL_COUNT" == 0 ]] || fail "空扩展环境仍保留旧扫描结果"
 
-printf '%s\n' 'PASS: 扩展扫描、策略、状态、多选、批量跳过及失败隔离测试通过'
+printf '%s\n' 'PASS: 扩展扫描、更新、策略、安全删除、多选及失败隔离测试通过'
