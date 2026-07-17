@@ -454,7 +454,9 @@ backup_size_display() {
 backup_show_list() {
     local index
     backup_inventory_scan || { ui_error "$BACKUP_LAST_ERROR"; return 1; }
-    printf '\n备份列表\n\n'
+    printf '\n'
+    ui_page_header '备份列表'
+    printf '\n'
     if (( ${#BACKUP_IDS[@]} == 0 )); then ui_info "暂无备份。"; return 0; fi
     for ((index = 0; index < ${#BACKUP_IDS[@]}; index++)); do
         printf '%d. %s | %s | %s | %s\n' "$((index + 1))" "${BACKUP_TIMES[index]}" \
@@ -791,7 +793,9 @@ backup_menu() {
     local choice
     while true; do
         ui_clear
-        printf '\n备份与恢复\n\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n0. 返回主菜单\n\n请选择操作：'
+        ui_page_header '备份与恢复'
+        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n\n0. 返回主菜单\n\n'
+        ui_menu_prompt '0-5'
         IFS= read -r choice || return 0
         case "$choice" in
             1) if backup_create manual "user-request"; then ui_success "手动备份创建成功：$(basename -- "$BACKUP_LAST_PATH")"; else ui_error "$BACKUP_LAST_ERROR"; fi; ui_pause ;;

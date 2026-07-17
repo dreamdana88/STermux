@@ -27,6 +27,7 @@ load_script_file() {
 load_script_file "$STERMUX_ROOT/core/utils.sh"
 load_script_file "$STERMUX_ROOT/core/config.sh"
 load_script_file "$STERMUX_ROOT/core/ui.sh"
+load_script_file "$STERMUX_ROOT/core/version.sh"
 load_script_file "$STERMUX_ROOT/core/autostart.sh"
 load_script_file "$STERMUX_ROOT/core/git.sh"
 load_script_file "$STERMUX_ROOT/core/backup.sh"
@@ -195,18 +196,115 @@ settings_confirm_autostart_change() {
     [[ "$confirm" == y || "$confirm" == Y ]]
 }
 
+settings_toggle_autostart() {
+    local action
+
+    AUTOSTART_LAST_BACKUP=""
+    autostart_status >/dev/null 2>&1 || true
+    case "$AUTOSTART_STATUS" in
+        enabled)
+            action="关闭"
+            if settings_confirm_autostart_change "$action"; then
+                if autostart_disable; then
+                    ui_success "已关闭自动进入 STermux。"
+                else
+                    ui_error "$AUTOSTART_LAST_ERROR"
+                    return 1
+                fi
+            else
+                ui_info "已取消关闭。"
+            fi
+            ;;
+        disabled)
+            action="开启"
+            if settings_confirm_autostart_change "$action"; then
+                if autostart_enable; then
+                    ui_success "已开启自动进入 STermux。"
+                else
+                    ui_error "$AUTOSTART_LAST_ERROR"
+                    return 1
+                fi
+            else
+                ui_info "已取消开启。"
+            fi
+            ;;
+        *)
+            ui_error "无法切换脚本自启：${AUTOSTART_LAST_ERROR:-当前配置状态异常}"
+            return 1
+            ;;
+    esac
+
+    if [[ -n "$AUTOSTART_LAST_BACKUP" ]]; then
+        ui_info "原 Shell 配置已备份：$AUTOSTART_LAST_BACKUP"
+    fi
+}
+
+settings_color_status_text() {
+    if [[ "${COLOR_ENABLED:-true}" != true ]]; then
+        printf '%s\n' "已关闭"
+    elif [[ -n "${NO_COLOR+x}" ]]; then
+        printf '%s\n' "已关闭（NO_COLOR）"
+    else
+        printf '%s\n' "已开启"
+    fi
+}
+
+settings_toggle_color() {
+    local target
+    local action
+    local confirm
+
+    if [[ "${COLOR_ENABLED:-true}" == true ]]; then
+        target=false
+        action="关闭"
+    else
+        target=true
+        action="开启"
+    fi
+
+    printf '确认%s终端颜色显示？[y/N] ' "$action"
+    IFS= read -r confirm || return 1
+    if [[ "$confirm" != y && "$confirm" != Y ]]; then
+        ui_info "已取消${action}。"
+        return 0
+    fi
+    if ! config_set_value "COLOR_ENABLED" "$target"; then
+        ui_error "无法保存颜色显示设置。"
+        return 1
+    fi
+    COLOR_ENABLED="$target"
+    ui_initialize
+    ui_success "已${action}终端颜色显示。"
+}
+
+settings_show_sillytavern_path() {
+    if sillytavern_path_is_valid "${ST_PATH:-}"; then
+        printf '\n当前 SillyTavern 路径：\n%s\n' "$ST_PATH"
+    elif [[ -n "${ST_PATH:-}" ]]; then
+        printf '\n当前保存的 SillyTavern 路径无效：\n%s\n' "$ST_PATH"
+    else
+        ui_info "尚未设置 SillyTavern 路径。"
+    fi
+}
+
+settings_show_version() {
+    printf '\nSTermux 版本：%s\n' "$(stermux_version_display)"
+}
+
 settings_menu() {
     local choice
 
     while true; do
         ui_clear
-        printf '\n设置\n\n'
-        printf '自动进入 STermux：%s\n\n' "$(autostart_status_text)"
+        ui_page_header 'STermux 设置'
+        printf '\n'
         printf '1. 设置 SillyTavern 路径\n'
-        printf '2. 开启自动进入\n'
-        printf '3. 关闭自动进入\n'
-        printf '0. 返回主菜单\n\n'
-        printf '请选择操作：'
+        printf '\n2. 脚本自启：%s\n' "$(autostart_status_text)"
+        printf '\n3. 颜色显示：%s\n' "$(settings_color_status_text)"
+        printf '\n4. 查看当前 SillyTavern 路径\n'
+        printf '5. 查看 STermux 版本信息\n'
+        printf '\n0. 返回主菜单\n\n'
+        ui_menu_prompt '0-5'
         IFS= read -r choice || return 0
         case "$choice" in
             1)
@@ -214,38 +312,26 @@ settings_menu() {
                 ui_pause
                 ;;
             2)
-                if settings_confirm_autostart_change "开启"; then
-                    if autostart_enable; then
-                        ui_success "已开启自动进入 STermux。"
-                        [[ -n "$AUTOSTART_LAST_BACKUP" ]] \
-                            && ui_info "原 Shell 配置已备份：$AUTOSTART_LAST_BACKUP"
-                    else
-                        ui_error "$AUTOSTART_LAST_ERROR"
-                    fi
-                else
-                    ui_info "已取消开启。"
-                fi
+                settings_toggle_autostart || true
                 ui_pause
                 ;;
             3)
-                if settings_confirm_autostart_change "关闭"; then
-                    if autostart_disable; then
-                        ui_success "已关闭自动进入 STermux。"
-                        [[ -n "$AUTOSTART_LAST_BACKUP" ]] \
-                            && ui_info "原 Shell 配置已备份：$AUTOSTART_LAST_BACKUP"
-                    else
-                        ui_error "$AUTOSTART_LAST_ERROR"
-                    fi
-                else
-                    ui_info "已取消关闭。"
-                fi
+                settings_toggle_color || true
+                ui_pause
+                ;;
+            4)
+                settings_show_sillytavern_path
+                ui_pause
+                ;;
+            5)
+                settings_show_version
                 ui_pause
                 ;;
             0)
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0 到 3。"
+                ui_warning "无效选项，请输入 0 到 5。"
                 ui_pause
                 ;;
         esac
@@ -253,15 +339,22 @@ settings_menu() {
 }
 
 show_main_menu() {
-    local installation_status
+    local sillytavern_version
+    local stermux_version
+
+    stermux_version="$(stermux_version_display)"
 
     if sillytavern_path_is_valid "${ST_PATH:-}"; then
         SILLYTAVERN_IS_INSTALLED=true
-        installation_status="已安装：$ST_PATH"
-        ui_main_menu "$installation_status"
+        sillytavern_version="$(sillytavern_read_local_version)"
+        if [[ "$sillytavern_version" == "unknown" || -z "$sillytavern_version" ]]; then
+            sillytavern_version="版本未知"
+        fi
+        # Phase 5 计划备份尚未实现，不能将 protective 备份误显示为自动备份已开启。
+        ui_main_menu "$sillytavern_version" "$stermux_version" "已关闭"
     else
         SILLYTAVERN_IS_INSTALLED=false
-        ui_uninstalled_menu
+        ui_uninstalled_menu "$stermux_version"
     fi
 }
 
@@ -270,7 +363,11 @@ main_loop() {
 
     while true; do
         show_main_menu
-        printf '请选择操作：'
+        if [[ "$SILLYTAVERN_IS_INSTALLED" == true ]]; then
+            ui_menu_prompt '0-6'
+        else
+            ui_menu_prompt '0-4'
+        fi
 
         if ! IFS= read -r choice; then
             printf '\n'
@@ -288,13 +385,13 @@ main_loop() {
                     open_sillytavern_update_center || true
                     ;;
                 3)
-                    open_stermux_update_center || true
-                    ;;
-                4)
                     open_sillytavern_extensions || true
                     ;;
-                5)
+                4)
                     open_backup_center || true
+                    ;;
+                5)
+                    open_stermux_update_center || true
                     ;;
                 6)
                     settings_menu
@@ -345,6 +442,7 @@ main() {
         ui_error "配置加载失败，STermux 无法继续启动。"
         return 1
     fi
+    ui_initialize
 
     detect_sillytavern_path || true
     main_loop

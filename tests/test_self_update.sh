@@ -41,10 +41,11 @@ create_repository_set() {
     git_quiet -C "$SOURCE_REPO" checkout -b release || return 1
     mkdir -p -- "$SOURCE_REPO/core" "$SOURCE_REPO/config"
     printf '%s\n' '#!/usr/bin/env bash' 'printf "manager-v1\n"' > "$SOURCE_REPO/manager.sh"
+    printf '%s\n' 'v0.0.1' > "$SOURCE_REPO/VERSION"
     printf '%s\n' 'program-v1' > "$SOURCE_REPO/core/program.txt"
     printf '%s\n' '# runtime config' > "$SOURCE_REPO/config/user.conf"
     printf '%s\n' '# extension policy' > "$SOURCE_REPO/config/extension-policy.conf"
-    git_quiet -C "$SOURCE_REPO" add manager.sh core/program.txt \
+    git_quiet -C "$SOURCE_REPO" add manager.sh VERSION core/program.txt \
         config/user.conf config/extension-policy.conf || return 1
     git_quiet -C "$SOURCE_REPO" commit -m "initial" || return 1
     git_quiet -C "$SOURCE_REPO" remote add origin "$REMOTE_REPO" || return 1
@@ -67,6 +68,7 @@ GIT_NETWORK_TIMEOUT_SECONDS=10
 STERMUX_ROOT="$TEST_TMP_ROOT/not-set"
 source "$PROJECT_ROOT/core/git.sh"
 source "$PROJECT_ROOT/core/ui.sh"
+source "$PROJECT_ROOT/core/version.sh"
 source "$PROJECT_ROOT/modules/stermux/update.sh"
 ui_initialize
 
@@ -78,8 +80,8 @@ extension_policy_value='ManualExtension=manual'
 stermux_update_refresh || fail "最新状态检查失败：$STERMUX_UPDATE_ERROR"
 [[ "$STERMUX_UPDATE_STATUS" == "latest" ]] || fail "初始状态不是 latest"
 status_output="$(stermux_update_show_status)"
-[[ "$status_output" == *"当前版本：开发版"* ]] || fail "普通状态缺少开发版显示"
-[[ "$status_output" == *"当前状态：已是最新"* ]] || fail "普通状态缺少最新提示"
+[[ "$status_output" == *"当前版本 : v0.0.1"* ]] || fail "普通状态缺少统一版本显示"
+[[ "$status_output" == *"更新状态 : 已是最新"* ]] || fail "普通状态缺少最新提示"
 [[ "$status_output" != *"Commit"* && "$status_output" != *"Upstream"* ]] \
     || fail "普通状态泄露 Git 技术信息"
 technical_output="$(stermux_update_show_technical_details)"

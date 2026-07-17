@@ -124,14 +124,29 @@ stermux_update_user_status_text() {
     esac
 }
 
+stermux_update_status_role() {
+    case "$STERMUX_UPDATE_STATUS" in
+        latest) printf '%s\n' "success" ;;
+        update_available) printf '%s\n' "warning" ;;
+        fetch_failed|compare_failed|git_unusable|not_git|pull_failed|restart_failed) printf '%s\n' "error" ;;
+        local_changes|local_ahead|diverged|no_upstream|detached) printf '%s\n' "warning" ;;
+        *) printf '%s\n' "default" ;;
+    esac
+}
+
 stermux_update_show_status() {
-    printf '\nSTermux 更新\n\n'
-    printf '当前版本：开发版\n'
-    printf '当前状态：%s\n' "$(stermux_update_user_status_text)"
+    ui_page_header 'STermux 更新'
+    printf '\n'
+    printf '当前版本 : %s\n' "$(stermux_version_display)"
+    printf '更新状态 : '
+    ui_colorize "$(stermux_update_status_role)" "$(stermux_update_user_status_text)"
+    printf '\n'
 }
 
 stermux_update_show_technical_details() {
-    printf '\nSTermux 更新技术详情\n\n'
+    printf '\n'
+    ui_page_header 'STermux 更新技术详情'
+    printf '\n'
     printf '当前分支：%s\n' "$STERMUX_UPDATE_BRANCH"
     printf '当前 Commit：%s\n' "$STERMUX_UPDATE_COMMIT"
     printf 'Upstream：%s\n' "$STERMUX_UPDATE_UPSTREAM"
@@ -279,7 +294,7 @@ stermux_update_menu() {
         printf '2. 更新 STermux\n'
         printf '3. 查看技术详情\n'
         printf '0. 返回主菜单\n\n'
-        printf '请选择操作：'
+        ui_menu_prompt '0-3'
         IFS= read -r choice || return 0
 
         case "$choice" in

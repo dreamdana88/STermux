@@ -12,7 +12,7 @@
 
 状态：Phase 4 本地实现与隔离自动测试通过，待 Android Termux 实机验证
 
-最后更新：2026-07-16（Phase 3 已完成；Phase 4 本地通过，待 Android Termux 实机验证）
+最后更新：2026-07-17（独立终端 UI 优化本地通过；Phase 4 状态保持待 Android Termux 实机验证）
 
 ---
 
@@ -30,6 +30,8 @@
 | Phase 6 | 版本回退         | 未开始 |
 | Phase 7 | 模块系统整理     | 未开始 |
 | Phase 8 | 安装与发布       | 未开始（自动进入子功能本地通过） |
+
+独立优化项：终端 UI 基线重整——本地通过，待 Android Termux 实机验证。该项不代表进入 Phase 5。
 
 ---
 
@@ -69,18 +71,26 @@
 - 不完整安装可在确认后改名保留再安装，不使用递归覆盖删除
 - 安装输出实时显示并同步记录日志、clone 支持用户取消、安装失败隔离及首次启动复用统一启动逻辑
 - SillyTavern 首次启动缺少 `node_modules` 时显示可能耗时数分钟的明确提示
-- 独立 STermux 更新页面与“开发版”用户状态显示
+- 独立 STermux 更新页面与统一正式版本显示
 - STermux 自身分支、upstream、fetch 及 ahead / behind 检查
 - 使用 `git pull --ff-only` 执行安全自更新，不使用 `reset --hard`
 - tracked 程序文件修改、本地领先、分叉、无 upstream 和 detached HEAD 保护
 - `config/user.conf`、data 与日志等运行时文件不参与程序修改拦截
 - STermux 自更新技术详情、结果日志和更新后 `exec` 自动重启
+- 项目根目录 `VERSION` 作为 STermux 单一可信版本来源，当前为 `v0.0.1`
+- 主菜单采用品牌区、本地状态摘要和 SillyTavern/系统分组，不再显示长路径或 Git 技术字段
+- 已安装首页显示 SillyTavern 本地版本、STermux 版本与计划备份状态；Phase 5 未实现时如实显示自动备份已关闭
+- 未安装首页显示安装和已有路径入口，并隐藏更新中心、扩展管理与备份恢复
+- 设置页简化为路径、脚本自启、颜色、当前路径和版本信息，不增加单项分组标题
+- `core/ui.sh` 统一颜色、页面标题、分隔线、状态行、菜单提示及中英文显示宽度处理
+- 支持 `COLOR_ENABLED`、`NO_COLOR`、非 TTY 与 `TERM=dumb` 纯文本降级
+- 备份、扩展、SillyTavern 更新与 STermux 更新页面完成一致的展示层整理
 
 ---
 
 ## 当前开发中功能
 
-暂无。Phase 4 本地实现与隔离自动测试已通过，等待 Android Termux 实机验证。
+独立终端 UI 优化已完成本地实现与隔离自动测试，等待 Android Termux 实机验证。Phase 4 同时保持待实机验证。
 
 ---
 
@@ -89,6 +99,7 @@
 - Phase 1 终端主菜单社区标题边框的 Android Termux 目视复测
 - Phase 4 完成后的 Android Termux 真实备份与恢复验证
 - Phase 8 自动进入子功能的 Android Termux Bash 实机验证
+- 独立终端 UI 优化的 Android Termux 窄屏、颜色、动态菜单和入口回归验证
 
 ---
 
@@ -143,7 +154,7 @@
 - 新增独立 Phase 2.6：STermux 自更新。
 - 主菜单已增加独立“STermux 更新”，与 SillyTavern 更新中心分离。
 - 自更新使用 `git pull --ff-only`，更新前拒绝 tracked 程序修改、本地领先和分叉状态。
-- 当前没有正式版本体系，普通界面如实显示“开发版”；Commit 与 ahead / behind 仅在技术详情显示。
+- Phase 2.6 初始阶段未虚构版本号；现已由独立 UI 优化建立根目录 `VERSION`，Git Commit 与 ahead / behind 仍只在技术详情显示。
 - 更新成功后通过 `exec bash manager.sh` 重新加载最新版程序，并覆盖重启失败状态。
 - 新增 `tests/test_self_update.sh`，全部使用临时本地 Git 仓库和重启 Mock，不操作真实项目仓库。
 - 完整本地自动测试由 7 项增加到 8 项，结果 8/8 通过。
@@ -322,9 +333,26 @@
 
 ---
 
+## 独立终端 UI 优化测试矩阵
+
+| 功能 | 本地测试 | Linux / 模拟 Termux | Termux 实机 | 状态 |
+| ---- | -------- | ------------------- | ----------- | ---- |
+| 已安装 / 未安装动态菜单 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 主菜单既有功能路由 | 隔离 manager Fixture 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| SillyTavern 本地版本与异常降级 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| STermux VERSION 单一来源 | 正常、缺失、异常通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 自动备份真实状态 | Phase 5 未实现时关闭、未安装时未开启 | Git Bash 通过 | 待测试 | 本地通过 |
+| 颜色开关与 NO_COLOR | 开启、关闭、空值 NO_COLOR 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 非 TTY / TERM=dumb 降级 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| ANSI 与中英文显示宽度 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 设置页简化与信息入口 | 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+| 完整回归 | 11/11 通过 | Git Bash 通过 | 待测试 | 本地通过 |
+
+---
+
 ## 下一步
 
-继续完成 Phase 4 Android Termux 备份验收，并独立验证 Bash 自动进入子功能；不进入 Phase 5，也不提前展开 Phase 8 其他范围。
+完成 Phase 4 Android Termux 备份验收，并验证终端 UI 与 Bash 自动进入子功能；不进入 Phase 5，也不提前展开 Phase 8 其他范围。
 
 ---
 
@@ -343,3 +371,5 @@
 2026-07-16：Phase 4 备份范围扩展至 data、config.yaml 和全局 third-party；Git/隐藏文件、目录缺失与同步恢复回归通过。Bash 语法及完整 10/10 回归通过，等待 Android Termux 实机验收。
 
 2026-07-16：备份界面类型完成中文化；Phase 8 自动进入子功能完成本地实现与隔离测试，完整回归 11/11 通过，Phase 4 状态保持待 Android Termux 实机验收。
+
+2026-07-17：独立终端 UI 基线重整完成本地实现。新增 `VERSION v0.0.1`、动态分组首页、简洁设置页、统一颜色与纯文本降级；Bash 语法和完整隔离回归 11/11 通过，Phase 4 状态未改变。

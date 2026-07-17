@@ -317,13 +317,25 @@ sillytavern_extension_status_text() {
     esac
 }
 
+sillytavern_extension_status_role() {
+    local index="$1"
+
+    case "${EXTENSION_STATUSES[index]}" in
+        latest) printf '%s\n' "success" ;;
+        update_available|manual_only_update_available) printf '%s\n' "warning" ;;
+        fetch_failed|update_failed) printf '%s\n' "error" ;;
+        *) printf '%s\n' "default" ;;
+    esac
+}
+
 sillytavern_extensions_show_list() {
     local index
 
-    printf '\n第三方扩展\n\n'
+    ui_page_header '第三方扩展管理'
+    printf '\n'
     printf '已识别：%s  Git：%s  非 Git：%s\n' \
         "$EXTENSION_TOTAL_COUNT" "$EXTENSION_GIT_COUNT" "$EXTENSION_NON_GIT_COUNT"
-    printf '可自动更新：%s  仅手动可更新：%s  检测失败：%s\n\n' \
+    printf '可更新：%s  仅手动：%s  检测失败：%s\n\n' \
         "$EXTENSION_UPDATE_COUNT" "$EXTENSION_MANUAL_UPDATE_COUNT" "$EXTENSION_FAILED_COUNT"
 
     if [[ -n "$EXTENSION_SCAN_ERROR" ]]; then
@@ -335,8 +347,10 @@ sillytavern_extensions_show_list() {
         return 0
     fi
     for ((index = 0; index < EXTENSION_TOTAL_COUNT; index++)); do
-        printf '%d. %s — %s\n' "$((index + 1))" "${EXTENSION_NAMES[index]}" \
+        printf '%d. %s — ' "$((index + 1))" "${EXTENSION_NAMES[index]}"
+        ui_colorize "$(sillytavern_extension_status_role "$index")" \
             "$(sillytavern_extension_status_text "$index")"
+        printf '\n'
     done
 }
 
@@ -344,7 +358,9 @@ sillytavern_extension_show_details() {
     local index="$1"
 
     (( index >= 0 && index < EXTENSION_TOTAL_COUNT )) || return 1
-    printf '\n扩展技术详情\n\n'
+    printf '\n'
+    ui_page_header '扩展技术详情'
+    printf '\n'
     printf '名称：%s\n' "${EXTENSION_NAMES[index]}"
     printf '路径：%s\n' "${EXTENSION_PATHS[index]}"
     printf '策略：%s\n' "${EXTENSION_POLICIES[index]}"
@@ -671,7 +687,7 @@ sillytavern_extensions_menu() {
         printf '7. 查看当前更新策略\n'
         printf '8. 查看扩展技术详情\n'
         printf '0. 返回主菜单\n\n'
-        printf '请选择操作：'
+        ui_menu_prompt '0-8'
         IFS= read -r choice || return 0
 
         case "$choice" in

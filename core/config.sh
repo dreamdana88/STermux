@@ -35,7 +35,7 @@ config_set_value() {
     local replaced=false
 
     case "$key" in
-        ST_PATH)
+        ST_PATH|COLOR_ENABLED)
             ;;
         *)
             printf '拒绝保存未知配置项：%s\n' "$key" >&2

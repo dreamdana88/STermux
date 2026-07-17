@@ -209,6 +209,15 @@ sillytavern_update_user_status_text() {
     esac
 }
 
+sillytavern_update_status_role() {
+    case "$ST_UPDATE_STATUS" in
+        latest) printf '%s\n' "success" ;;
+        update_available) printf '%s\n' "warning" ;;
+        git_missing|not_git|fetch_failed|compare_failed|pull_failed) printf '%s\n' "error" ;;
+        *) printf '%s\n' "default" ;;
+    esac
+}
+
 sillytavern_update_history_ensure_schema() {
     local history_file
     local history_dir
@@ -334,10 +343,13 @@ sillytavern_update_show_status() {
     local_version="$(sillytavern_version_display "$ST_UPDATE_LOCAL_VERSION")"
     remote_version="$(sillytavern_version_display "$ST_UPDATE_REMOTE_VERSION")"
 
-    printf '\nSillyTavern 更新状态\n\n'
-    printf '当前版本：%s\n' "$local_version"
-    printf '最新版本：%s\n' "$remote_version"
-    printf '更新状态：%s\n' "$status_text"
+    ui_page_header 'SillyTavern 更新中心'
+    printf '\n'
+    printf '当前版本 : %s\n' "$local_version"
+    printf '最新版本 : %s\n' "$remote_version"
+    printf '更新状态 : '
+    ui_colorize "$(sillytavern_update_status_role)" "$status_text"
+    printf '\n'
 }
 
 sillytavern_update_show_technical_details() {
@@ -352,7 +364,9 @@ sillytavern_update_show_technical_details() {
             ;;
     esac
 
-    printf '\nSillyTavern 更新技术详情\n\n'
+    printf '\n'
+    ui_page_header 'SillyTavern 更新技术详情'
+    printf '\n'
     printf '当前分支：%s\n' "$ST_UPDATE_BRANCH"
     printf '当前 Commit：%s\n' "$ST_UPDATE_COMMIT"
     printf 'Upstream：%s\n' "$ST_UPDATE_UPSTREAM"
@@ -378,7 +392,9 @@ sillytavern_update_show_history() {
     local count=0
 
     history_file="$(sillytavern_update_history_file)"
-    printf '\n最近更新历史\n\n'
+    printf '\n'
+    ui_page_header '最近更新历史'
+    printf '\n'
 
     if [[ ! -s "$history_file" ]]; then
         ui_info "暂无更新历史。"
@@ -503,7 +519,7 @@ sillytavern_update_menu() {
         printf '3. 查看更新历史\n'
         printf '4. 查看技术详情\n'
         printf '0. 返回主菜单\n\n'
-        printf '请选择操作：'
+        ui_menu_prompt '0-4'
 
         if ! IFS= read -r choice; then
             return 0

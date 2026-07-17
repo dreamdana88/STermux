@@ -14,6 +14,7 @@ syntax_files=(
     "$PROJECT_ROOT/core/git.sh"
     "$PROJECT_ROOT/core/ui.sh"
     "$PROJECT_ROOT/core/utils.sh"
+    "$PROJECT_ROOT/core/version.sh"
     "$PROJECT_ROOT/modules/sillytavern/update.sh"
     "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh"
     "$PROJECT_ROOT/modules/sillytavern/install.sh"
