@@ -6,7 +6,6 @@ EXTENSION_TOTAL_COUNT=0
 EXTENSION_GIT_COUNT=0
 EXTENSION_NON_GIT_COUNT=0
 EXTENSION_UPDATE_COUNT=0
-EXTENSION_MANUAL_UPDATE_COUNT=0
 EXTENSION_FAILED_COUNT=0
 EXTENSION_BATCH_SUCCESS=0
 EXTENSION_BATCH_FAILED=0
@@ -17,7 +16,6 @@ EXTENSION_DELETE_FAILED=0
 declare -a EXTENSION_NAMES=()
 declare -a EXTENSION_PATHS=()
 declare -a EXTENSION_IS_GIT=()
-declare -a EXTENSION_POLICIES=()
 declare -a EXTENSION_STATUSES=()
 declare -a EXTENSION_UPSTREAMS=()
 declare -a EXTENSION_AHEADS=()
@@ -33,91 +31,8 @@ sillytavern_extensions_root() {
     printf '%s\n' "$ST_PATH/public/scripts/extensions/third-party"
 }
 
-sillytavern_extension_policy_file() {
-    printf '%s\n' "$STERMUX_ROOT/config/extension-policy.conf"
-}
-
 sillytavern_extension_log_file() {
     printf '%s\n' "$STERMUX_ROOT/data/logs/extension-update.log"
-}
-
-sillytavern_extension_name_is_policy_safe() {
-    local name="$1"
-
-    [[ -n "$name" ]] || return 1
-    [[ "$name" != *$'\n'* && "$name" != *$'\r'* && "$name" != *'='* ]]
-}
-
-sillytavern_extension_policy_get() {
-    local extension_name="$1"
-    local policy_file
-    local line
-    local key
-    local value
-
-    policy_file="$(sillytavern_extension_policy_file)"
-    [[ -r "$policy_file" ]] || {
-        printf '%s\n' "auto"
-        return 0
-    }
-
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%$'\r'}"
-        [[ -n "$line" && "$line" != \#* && "$line" == *=* ]] || continue
-        key="${line%%=*}"
-        value="${line#*=}"
-        if [[ "$key" == "$extension_name" ]]; then
-            case "$value" in
-                auto|manual)
-                    printf '%s\n' "$value"
-                    return 0
-                    ;;
-            esac
-        fi
-    done < "$policy_file"
-
-    printf '%s\n' "auto"
-}
-
-sillytavern_extension_policy_set() {
-    local extension_name="$1"
-    local policy="$2"
-    local policy_file
-    local policy_dir
-    local temporary_file
-    local line
-    local key
-
-    sillytavern_extension_name_is_policy_safe "$extension_name" || return 1
-    [[ "$policy" == "auto" || "$policy" == "manual" ]] || return 1
-
-    policy_file="$(sillytavern_extension_policy_file)"
-    policy_dir="$(dirname -- "$policy_file")"
-    temporary_file="$policy_file.tmp.$$"
-    mkdir -p -- "$policy_dir" || return 1
-    : > "$temporary_file" || return 1
-
-    if [[ -f "$policy_file" ]]; then
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            key=""
-            if [[ "$line" == *=* ]]; then
-                key="${line%%=*}"
-            fi
-            if [[ "$key" != "$extension_name" ]]; then
-                printf '%s\n' "$line" >> "$temporary_file" || return 1
-            fi
-        done < "$policy_file"
-    fi
-
-    if [[ "$policy" == "manual" ]]; then
-        printf '%s=manual\n' "$extension_name" >> "$temporary_file" || return 1
-    fi
-
-    if ! mv -- "$temporary_file" "$policy_file"; then
-        rm -f -- "$temporary_file" 2>/dev/null || true
-        return 1
-    fi
-    return 0
 }
 
 sillytavern_extension_delete_path_is_safe() {
@@ -156,13 +71,6 @@ sillytavern_extension_delete_index() {
     fi
     if ! sillytavern_extension_remove_directory "$path" || [[ -e "$path" || -L "$path" ]]; then
         EXTENSION_ERRORS[index]="扩展目录删除失败"
-        sillytavern_extension_log_result "$name" unknown unknown delete_failed \
-            "${EXTENSION_ERRORS[index]}" || true
-        return 1
-    fi
-    if sillytavern_extension_name_is_policy_safe "$name" \
-        && ! sillytavern_extension_policy_set "$name" auto; then
-        EXTENSION_ERRORS[index]="扩展已删除，但 manual 策略清理失败"
         sillytavern_extension_log_result "$name" unknown unknown delete_failed \
             "${EXTENSION_ERRORS[index]}" || true
         return 1
@@ -229,12 +137,10 @@ sillytavern_extensions_reset_inventory() {
     EXTENSION_GIT_COUNT=0
     EXTENSION_NON_GIT_COUNT=0
     EXTENSION_UPDATE_COUNT=0
-    EXTENSION_MANUAL_UPDATE_COUNT=0
     EXTENSION_FAILED_COUNT=0
     EXTENSION_NAMES=()
     EXTENSION_PATHS=()
     EXTENSION_IS_GIT=()
-    EXTENSION_POLICIES=()
     EXTENSION_STATUSES=()
     EXTENSION_UPSTREAMS=()
     EXTENSION_AHEADS=()
@@ -250,7 +156,6 @@ sillytavern_extensions_recount() {
     EXTENSION_GIT_COUNT=0
     EXTENSION_NON_GIT_COUNT=0
     EXTENSION_UPDATE_COUNT=0
-    EXTENSION_MANUAL_UPDATE_COUNT=0
     EXTENSION_FAILED_COUNT=0
 
     for ((index = 0; index < EXTENSION_TOTAL_COUNT; index++)); do
@@ -264,9 +169,6 @@ sillytavern_extensions_recount() {
             update_available)
                 EXTENSION_UPDATE_COUNT=$((EXTENSION_UPDATE_COUNT + 1))
                 ;;
-            manual_only_update_available)
-                EXTENSION_MANUAL_UPDATE_COUNT=$((EXTENSION_MANUAL_UPDATE_COUNT + 1))
-                ;;
             fetch_failed|no_upstream|update_failed)
                 EXTENSION_FAILED_COUNT=$((EXTENSION_FAILED_COUNT + 1))
                 ;;
@@ -278,7 +180,6 @@ sillytavern_extensions_scan() {
     local root
     local extension_path
     local extension_name
-    local policy
     local -a candidates=()
     local nullglob_was_enabled=false
 
@@ -304,10 +205,8 @@ sillytavern_extensions_scan() {
     for extension_path in "${candidates[@]}"; do
         [[ -d "$extension_path" ]] || continue
         extension_name="$(basename -- "$extension_path")"
-        policy="$(sillytavern_extension_policy_get "$extension_name")"
         EXTENSION_NAMES+=("$extension_name")
         EXTENSION_PATHS+=("$extension_path")
-        EXTENSION_POLICIES+=("$policy")
         EXTENSION_UPSTREAMS+=("unknown")
         EXTENSION_AHEADS+=(0)
         EXTENSION_BEHINDS+=(0)
@@ -327,14 +226,11 @@ sillytavern_extensions_scan() {
 sillytavern_extension_refresh_index() {
     local index="$1"
     local path
-    local policy
     local upstream
     local git_output
 
     (( index >= 0 && index < ${#EXTENSION_NAMES[@]} )) || return 1
     path="${EXTENSION_PATHS[index]}"
-    policy="$(sillytavern_extension_policy_get "${EXTENSION_NAMES[index]}")"
-    EXTENSION_POLICIES[index]="$policy"
     EXTENSION_UPSTREAMS[index]="unknown"
     EXTENSION_AHEADS[index]=0
     EXTENSION_BEHINDS[index]=0
@@ -387,8 +283,6 @@ sillytavern_extension_refresh_index() {
     EXTENSION_BEHINDS[index]="$GIT_BEHIND_COUNT"
     if (( GIT_BEHIND_COUNT == 0 )); then
         EXTENSION_STATUSES[index]="latest"
-    elif [[ "$policy" == "manual" ]]; then
-        EXTENSION_STATUSES[index]="manual_only_update_available"
     else
         EXTENSION_STATUSES[index]="update_available"
     fi
@@ -414,7 +308,6 @@ sillytavern_extension_status_text() {
         not_checked) printf '%s\n' "尚未检测" ;;
         latest) printf '%s\n' "最新" ;;
         update_available) printf '可更新 %s 个 Commit\n' "${EXTENSION_BEHINDS[index]}" ;;
-        manual_only_update_available) printf '可更新 %s 个 Commit，仅手动\n' "${EXTENSION_BEHINDS[index]}" ;;
         fetch_failed) printf '%s\n' "检测失败" ;;
         no_upstream) printf '%s\n' "无 upstream" ;;
         not_git) printf '%s\n' "非 Git 安装" ;;
@@ -428,7 +321,7 @@ sillytavern_extension_status_role() {
 
     case "${EXTENSION_STATUSES[index]}" in
         latest) printf '%s\n' "success" ;;
-        update_available|manual_only_update_available) printf '%s\n' "warning" ;;
+        update_available) printf '%s\n' "warning" ;;
         fetch_failed|update_failed) printf '%s\n' "error" ;;
         *) printf '%s\n' "default" ;;
     esac
@@ -439,10 +332,10 @@ sillytavern_extensions_show_list() {
 
     ui_page_header '第三方扩展管理'
     printf '\n'
-    printf '已识别：%s  Git：%s  非 Git：%s\n' \
+    printf '已识别：%s   Git：%s   非 Git：%s\n' \
         "$EXTENSION_TOTAL_COUNT" "$EXTENSION_GIT_COUNT" "$EXTENSION_NON_GIT_COUNT"
-    printf '可更新：%s  仅手动：%s  检测失败：%s\n\n' \
-        "$EXTENSION_UPDATE_COUNT" "$EXTENSION_MANUAL_UPDATE_COUNT" "$EXTENSION_FAILED_COUNT"
+    printf '可更新：%s   检测失败：%s\n\n' \
+        "$EXTENSION_UPDATE_COUNT" "$EXTENSION_FAILED_COUNT"
 
     if [[ -n "$EXTENSION_SCAN_ERROR" ]]; then
         ui_error "$EXTENSION_SCAN_ERROR"
@@ -469,7 +362,6 @@ sillytavern_extension_show_details() {
     printf '\n'
     printf '名称：%s\n' "${EXTENSION_NAMES[index]}"
     printf '路径：%s\n' "${EXTENSION_PATHS[index]}"
-    printf '策略：%s\n' "${EXTENSION_POLICIES[index]}"
     printf '状态：%s\n' "$(sillytavern_extension_status_text "$index")"
     printf 'Upstream：%s\n' "${EXTENSION_UPSTREAMS[index]}"
     printf 'ahead / behind：领先 %s，落后 %s\n' \
@@ -519,7 +411,7 @@ sillytavern_extension_update_index() {
                 "skipped" "已是最新" || true
             return 3
             ;;
-        update_available|manual_only_update_available)
+        update_available)
             ;;
         *)
             before_commit="$(git_current_commit "$path")" || before_commit="unknown"
@@ -593,8 +485,6 @@ sillytavern_extension_reset_batch_result() {
 }
 
 sillytavern_extension_batch_update() {
-    local mode="$1"
-    shift
     local index
     local update_status
 
@@ -607,15 +497,7 @@ sillytavern_extension_batch_update() {
 
         ui_info "正在检查扩展：${EXTENSION_NAMES[index]}"
         sillytavern_extension_refresh_index "$index" || true
-        if [[ "$mode" == "auto" && "${EXTENSION_POLICIES[index]}" == "manual" ]]; then
-            EXTENSION_BATCH_SKIPPED=$((EXTENSION_BATCH_SKIPPED + 1))
-            sillytavern_extension_log_result "${EXTENSION_NAMES[index]}" \
-                "$(git_current_commit "${EXTENSION_PATHS[index]}" 2>/dev/null || printf '%s' unknown)" \
-                "$(git_current_commit "${EXTENSION_PATHS[index]}" 2>/dev/null || printf '%s' unknown)" \
-                "skipped" "仅手动更新策略" || true
-            continue
-        fi
-        if [[ "$mode" == "auto" && "${EXTENSION_STATUSES[index]}" == "not_git" ]]; then
+        if [[ "${EXTENSION_STATUSES[index]}" == "not_git" ]]; then
             EXTENSION_BATCH_SKIPPED=$((EXTENSION_BATCH_SKIPPED + 1))
             sillytavern_extension_log_result "${EXTENSION_NAMES[index]}" \
                 "unknown" "unknown" "skipped" "非 Git 安装" || true
@@ -697,20 +579,13 @@ sillytavern_extension_prompt_selection() {
 }
 
 sillytavern_extension_update_selected_interactive() {
-    local allow_multiple="$1"
-    local prompt
-
-    if [[ "$allow_multiple" == true ]]; then
-        prompt='请输入扩展编号（支持空格或逗号分隔）：'
-    else
-        prompt='请输入一个扩展编号：'
-    fi
-    sillytavern_extension_prompt_selection "$prompt" "$allow_multiple" || return 1
+    sillytavern_extension_prompt_selection \
+        '请输入扩展编号（支持单个、空格或逗号分隔）：' true || return 1
     sillytavern_extension_confirm_selection "更新扩展" "${EXTENSION_SELECTED_INDEXES[@]}" || {
         ui_info "已取消扩展更新。"
         return 0
     }
-    sillytavern_extension_batch_update "explicit" "${EXTENSION_SELECTED_INDEXES[@]}"
+    sillytavern_extension_batch_update "${EXTENSION_SELECTED_INDEXES[@]}"
     sillytavern_extension_show_batch_summary
 }
 
@@ -725,50 +600,13 @@ sillytavern_extension_update_all_interactive() {
         ui_warning "当前没有可更新的扩展。"
         return 1
     }
-    ui_warning "仅手动更新的扩展会被自动跳过。"
-    sillytavern_extension_confirm_selection "检查并更新全部允许自动更新的扩展" \
+    sillytavern_extension_confirm_selection "检查并更新全部可更新的 Git 扩展" \
         "${all_indexes[@]}" || {
         ui_info "已取消批量更新。"
         return 0
     }
-    sillytavern_extension_batch_update "auto" "${all_indexes[@]}"
+    sillytavern_extension_batch_update "${all_indexes[@]}"
     sillytavern_extension_show_batch_summary
-}
-
-sillytavern_extension_set_policy_interactive() {
-    local policy="$1"
-    local index
-
-    sillytavern_extension_prompt_selection \
-        '请输入扩展编号（支持空格或逗号分隔）：' true || return 1
-    for index in "${EXTENSION_SELECTED_INDEXES[@]}"; do
-        if sillytavern_extension_policy_set "${EXTENSION_NAMES[index]}" "$policy"; then
-            EXTENSION_POLICIES[index]="$policy"
-            if [[ "${EXTENSION_STATUSES[index]}" == "update_available" && "$policy" == "manual" ]]; then
-                EXTENSION_STATUSES[index]="manual_only_update_available"
-            elif [[ "${EXTENSION_STATUSES[index]}" == "manual_only_update_available" && "$policy" == "auto" ]]; then
-                EXTENSION_STATUSES[index]="update_available"
-            fi
-            ui_success "${EXTENSION_NAMES[index]} 已设置为 $policy。"
-        else
-            ui_error "无法保存 ${EXTENSION_NAMES[index]} 的更新策略。"
-        fi
-    done
-    sillytavern_extensions_recount
-}
-
-sillytavern_extension_show_policies() {
-    local index
-
-    printf '\n第三方扩展更新策略\n\n'
-    if (( EXTENSION_TOTAL_COUNT == 0 )); then
-        ui_info "暂无扩展策略。"
-        return 0
-    fi
-    for ((index = 0; index < EXTENSION_TOTAL_COUNT; index++)); do
-        printf '%d. %s：%s\n' "$((index + 1))" "${EXTENSION_NAMES[index]}" \
-            "${EXTENSION_POLICIES[index]}"
-    done
 }
 
 sillytavern_extension_show_details_interactive() {
@@ -784,17 +622,15 @@ sillytavern_extensions_menu() {
     while true; do
         ui_clear
         sillytavern_extensions_show_list || true
-        printf '\n1. 扫描并检查更新\n'
-        printf '2. 更新一个扩展\n'
-        printf '3. 选择多个扩展更新\n'
-        printf '4. 更新全部允许自动更新的扩展\n'
-        printf '5. 设置为仅手动更新\n'
-        printf '6. 取消仅手动更新\n'
-        printf '7. 查看当前更新策略\n'
-        printf '8. 查看扩展技术详情\n'
-        printf '9. 删除扩展\n'
+        printf '\n'
+        ui_separator
+        printf '\n1. 检查更新\n'
+        printf '2. 更新扩展\n'
+        printf '3. 更新全部\n'
+        printf '4. 删除扩展\n'
+        printf '5. 查看扩展技术详情\n'
         printf '0. 返回主菜单\n\n'
-        ui_menu_prompt '0-9'
+        ui_menu_prompt '0-5'
         IFS= read -r choice || return 0
 
         case "$choice" in
@@ -809,42 +645,26 @@ sillytavern_extensions_menu() {
                 ui_pause
                 ;;
             2)
-                sillytavern_extension_update_selected_interactive false || true
+                sillytavern_extension_update_selected_interactive || true
                 ui_pause
                 ;;
             3)
-                sillytavern_extension_update_selected_interactive true || true
-                ui_pause
-                ;;
-            4)
                 sillytavern_extension_update_all_interactive || true
                 ui_pause
                 ;;
-            5)
-                sillytavern_extension_set_policy_interactive manual || true
-                ui_pause
-                ;;
-            6)
-                sillytavern_extension_set_policy_interactive auto || true
-                ui_pause
-                ;;
-            7)
-                sillytavern_extension_show_policies
-                ui_pause
-                ;;
-            8)
-                sillytavern_extension_show_details_interactive || true
-                ui_pause
-                ;;
-            9)
+            4)
                 sillytavern_extension_delete_interactive || true
+                ui_pause
+                ;;
+            5)
+                sillytavern_extension_show_details_interactive || true
                 ui_pause
                 ;;
             0)
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0 到 9。"
+                ui_warning "无效选项，请输入 0 到 5。"
                 ui_pause
                 ;;
         esac

@@ -52,7 +52,7 @@ create_isolated_project() {
     # 测试用户配置必须由测试自身创建，严禁复制项目真实 config/user.conf。
     printf '%s\n' '# Isolated test user configuration. Do not copy production user.conf.' \
         > "$target/config/user.conf" || return 1
-    printf '%s\n' '# Isolated extension policy. Do not copy production policy.' \
+    printf '%s\n' '# Legacy extension policy fixture; runtime must ignore it.' 'LegacyExt=manual' \
         > "$target/config/extension-policy.conf" || return 1
 }
 
@@ -104,7 +104,7 @@ run_user_config_isolation_regression() {
 
     printf -v quoted_forbidden_path '%q' "$forbidden_install"
     printf 'ST_PATH=%s\n' "$quoted_forbidden_path" > "$poison_source/config/user.conf" || return 1
-    printf '%s\n' '# Poison isolation policy fixture.' \
+    printf '%s\n' '# Legacy poison policy fixture; runtime must ignore it.' 'AnyExt=manual' \
         > "$poison_source/config/extension-policy.conf" || return 1
 
     printf -v quoted_marker_path '%q' "$forbidden_marker"
@@ -171,12 +171,14 @@ self_update_status=$?
 [[ "$self_update_output" == *"当前版本 : v0.0.1"* ]] || fail "STermux 更新页面未使用统一 VERSION"
 [[ "$self_update_output" == *"STermux 更新技术详情"* ]] || fail "STermux 更新页面缺少技术详情"
 
-extension_menu_output="$(printf '3\n7\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+extension_menu_output="$(printf '3\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 extension_menu_status=$?
 (( extension_menu_status == 0 )) || fail "第三方扩展菜单返回退出码 $extension_menu_status"
 [[ "$extension_menu_output" == *"第三方扩展"* ]] || fail "主菜单未进入第三方扩展管理"
-[[ "$extension_menu_output" == *"4. 更新全部允许自动更新的扩展"* ]] || fail "扩展菜单缺少批量更新入口"
-[[ "$extension_menu_output" == *"第三方扩展更新策略"* ]] || fail "扩展菜单缺少策略查看入口"
+[[ "$extension_menu_output" == *$'1. 检查更新\n2. 更新扩展\n3. 更新全部\n4. 删除扩展\n5. 查看扩展技术详情\n0. 返回主菜单'* ]] \
+    || fail "管理器未显示精简扩展菜单"
+[[ "$extension_menu_output" != *"仅手动"* && "$extension_menu_output" != *"更新策略"* ]] \
+    || fail "管理器扩展菜单仍显示已移除策略功能"
 
 backup_menu_output="$(printf '4\n1\n\n2\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 backup_menu_status=$?
@@ -195,6 +197,8 @@ settings_status=$?
 [[ "$settings_output" == *"4. 查看当前 SillyTavern 路径"* ]] || fail "设置菜单缺少路径信息入口"
 [[ "$settings_output" == *"5. 查看 STermux 版本信息"* ]] || fail "设置菜单缺少版本信息入口"
 [[ "$settings_output" == *"6. 卸载管理"* ]] || fail "设置菜单缺少卸载管理入口"
+[[ "$settings_output" == *$'1. 设置 SillyTavern 路径\n2. 脚本自启：已关闭（Bash）\n3. 颜色显示：已开启\n\n4. 查看当前 SillyTavern 路径\n5. 查看 STermux 版本信息\n\n6. 卸载管理'* ]] \
+    || fail "设置菜单逻辑分组空行错误"
 [[ "$settings_output" == *"当前 SillyTavern 路径："* ]] || fail "设置页面无法查看当前路径"
 [[ "$settings_output" == *"STermux 版本：v0.0.1"* ]] || fail "设置页面无法查看 STermux 版本"
 [[ "$settings_output" != *"[路径]"* && "$settings_output" != *"[启动]"* ]] \

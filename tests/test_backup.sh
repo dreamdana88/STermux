@@ -71,6 +71,10 @@ ui_initialize
 unset AUTOMATIC_BACKUP_KEEP
 [[ "$(backup_automatic_keep_value)" == 2 ]] || fail "旧配置缺少保留字段时未回退到 2"
 AUTOMATIC_BACKUP_KEEP=2
+automatic_settings_output="$(printf '0\n' | backup_automatic_settings_menu 2>&1)"
+[[ "$automatic_settings_output" == *"自动备份保留设置"* \
+    && "$automatic_settings_output" == *$'最大自动备份数量：2 份\n\n1. 设置最大自动备份数量'* ]] \
+    || fail "自动备份保留设置页信息区与选项排版错误"
 
 backup_current_epoch() { printf '%s\n' "$TEST_BACKUP_EPOCH"; }
 backup_current_display_time() { printf 'test-time-%s\n' "$TEST_BACKUP_EPOCH"; }

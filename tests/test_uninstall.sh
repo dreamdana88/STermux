@@ -66,6 +66,18 @@ source "$PROJECT_ROOT/core/backup.sh"
 source "$PROJECT_ROOT/core/uninstall.sh"
 ui_initialize
 
+COLOR_ENABLED=true
+ui_terminal_supports_color() { return 0; }
+ui_initialize
+uninstall_menu_output="$(uninstall_show_menu)"
+[[ "$uninstall_menu_output" == *$'\033[37m1. 卸载 STermux'* ]] \
+    || fail "卸载主选项未使用白色"
+[[ "$uninstall_menu_output" == *$'\033[90m   包含程序、配置、日志及所有备份'* ]] \
+    || fail "卸载备注未使用灰色次级文字"
+unset -f ui_terminal_supports_color
+COLOR_ENABLED=false
+ui_initialize
+
 uninstall_parse_selection '1 4 1 invalid 9' || fail "空格多选解析失败"
 [[ "${UNINSTALL_SELECTED_ACTIONS[*]}" == '1 4' ]] || fail "空格多选未过滤非法编号或去重"
 uninstall_parse_selection '2,3,2' || fail "逗号多选解析失败"

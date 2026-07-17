@@ -69,8 +69,9 @@ STERMUX_ROOT="$TEST_TMP_ROOT/stermux"
 ST_PATH="$TEST_TMP_ROOT/Silly Tavern 测试"
 EXTENSIONS_ROOT="$ST_PATH/public/scripts/extensions/third-party"
 mkdir -p -- "$STERMUX_ROOT/config" "$EXTENSIONS_ROOT" || exit 1
-printf '%s\n' '# test policy file' 'ManualExt=manual' > \
+printf '%s\n' '# legacy policy must remain untouched' 'LegacyPolicyExt=manual' > \
     "$STERMUX_ROOT/config/extension-policy.conf"
+LEGACY_POLICY_CONTENT="$(< "$STERMUX_ROOT/config/extension-policy.conf")"
 
 create_git_extension "latest" "LatestExt" || fail "无法创建最新扩展 Fixture"
 LATEST_PATH="$LAST_EXTENSION_PATH"
@@ -78,10 +79,10 @@ create_git_extension "auto" "自动 扩展" || fail "无法创建自动更新扩
 AUTO_SOURCE="$LAST_EXTENSION_SOURCE"
 AUTO_PATH="$LAST_EXTENSION_PATH"
 push_extension_update "$AUTO_SOURCE" "version=2-auto" || fail "无法创建自动扩展远程更新"
-create_git_extension "manual" "ManualExt" || fail "无法创建仅手动扩展 Fixture"
-MANUAL_SOURCE="$LAST_EXTENSION_SOURCE"
-MANUAL_PATH="$LAST_EXTENSION_PATH"
-push_extension_update "$MANUAL_SOURCE" "version=2-manual" || fail "无法创建手动扩展远程更新"
+create_git_extension "legacy-policy" "LegacyPolicyExt" || fail "无法创建旧策略扩展 Fixture"
+LEGACY_SOURCE="$LAST_EXTENSION_SOURCE"
+LEGACY_PATH="$LAST_EXTENSION_PATH"
+push_extension_update "$LEGACY_SOURCE" "version=2-legacy" || fail "无法创建旧策略扩展远程更新"
 create_git_extension "failure" "A-Failure" || fail "无法创建失败扩展 Fixture"
 FAILURE_SOURCE="$LAST_EXTENSION_SOURCE"
 FAILURE_PATH="$LAST_EXTENSION_PATH"
@@ -110,10 +111,18 @@ sillytavern_extensions_scan || fail "扩展扫描失败：$EXTENSION_SCAN_ERROR"
 [[ "$EXTENSION_TOTAL_COUNT" == 8 ]] || fail "一级扩展数量错误：$EXTENSION_TOTAL_COUNT"
 [[ "$EXTENSION_GIT_COUNT" == 7 ]] || fail "Git 扩展数量错误：$EXTENSION_GIT_COUNT"
 [[ "$EXTENSION_NON_GIT_COUNT" == 1 ]] || fail "非 Git 扩展数量错误：$EXTENSION_NON_GIT_COUNT"
+menu_output="$(printf '0\n' | sillytavern_extensions_menu 2>&1)"
+[[ "$menu_output" == *$'1. 检查更新\n2. 更新扩展\n3. 更新全部\n4. 删除扩展\n5. 查看扩展技术详情\n0. 返回主菜单'* ]] \
+    || fail "扩展精简菜单文案或顺序错误"
+[[ "$menu_output" == *"--------------------------------------------"* ]] \
+    || fail "扩展展示区与操作区之间缺少分隔线"
+[[ "$menu_output" != *"仅手动"* && "$menu_output" != *"更新策略"* \
+    && "$menu_output" != *"更新一个扩展"* && "$menu_output" != *"选择多个扩展更新"* ]] \
+    || fail "扩展菜单仍包含已移除入口"
 
 latest_index="$(extension_index_by_name "LatestExt")" || fail "未扫描 LatestExt"
 auto_index="$(extension_index_by_name "自动 扩展")" || fail "未扫描中文空格扩展"
-manual_index="$(extension_index_by_name "ManualExt")" || fail "未扫描 ManualExt"
+legacy_index="$(extension_index_by_name "LegacyPolicyExt")" || fail "未扫描 LegacyPolicyExt"
 failure_index="$(extension_index_by_name "A-Failure")" || fail "未扫描失败扩展"
 bulk_index="$(extension_index_by_name "BulkSuccess")" || fail "未扫描批量扩展"
 no_upstream_index="$(extension_index_by_name "NoUpstream")" || fail "未扫描无 upstream 扩展"
@@ -123,39 +132,33 @@ non_git_index="$(extension_index_by_name "NonGit")" || fail "未扫描非 Git �
 sillytavern_extensions_refresh_all || fail "扩展批量检测意外失败"
 [[ "${EXTENSION_STATUSES[latest_index]}" == "latest" ]] || fail "最新扩展状态错误"
 [[ "${EXTENSION_STATUSES[auto_index]}" == "update_available" ]] || fail "自动扩展更新状态错误"
-[[ "${EXTENSION_STATUSES[manual_index]}" == "manual_only_update_available" ]] \
-    || fail "仅手动扩展更新状态错误"
+[[ "${EXTENSION_STATUSES[legacy_index]}" == "update_available" ]] \
+    || fail "旧策略文件仍改变扩展更新状态"
 [[ "${EXTENSION_STATUSES[failure_index]}" == "update_available" ]] || fail "失败 Fixture 初始状态错误"
 [[ "${EXTENSION_STATUSES[bulk_index]}" == "update_available" ]] || fail "批量 Fixture 初始状态错误"
 [[ "${EXTENSION_STATUSES[no_upstream_index]}" == "no_upstream" ]] || fail "无 upstream 状态错误"
 [[ "${EXTENSION_STATUSES[fetch_failure_index]}" == "fetch_failed" ]] || fail "fetch 失败状态错误"
 [[ "${EXTENSION_STATUSES[non_git_index]}" == "not_git" ]] || fail "非 Git 状态错误"
-[[ "$EXTENSION_UPDATE_COUNT" == 3 ]] || fail "自动可更新数量错误：$EXTENSION_UPDATE_COUNT"
-[[ "$EXTENSION_MANUAL_UPDATE_COUNT" == 1 ]] || fail "仅手动可更新数量错误"
+[[ "$EXTENSION_UPDATE_COUNT" == 4 ]] || fail "可更新数量错误：$EXTENSION_UPDATE_COUNT"
 [[ "$EXTENSION_FAILED_COUNT" == 2 ]] || fail "检测失败数量错误"
 
 list_output="$(sillytavern_extensions_show_list 2>&1)"
 [[ "$list_output" == *"自动 扩展 — 可更新 1 个 Commit"* ]] || fail "列表缺少可更新状态"
-[[ "$list_output" == *"ManualExt — 可更新 1 个 Commit，仅手动"* ]] || fail "列表缺少手动状态"
+[[ "$list_output" == *"LegacyPolicyExt — 可更新 1 个 Commit"* ]] || fail "旧策略扩展未统一显示可更新"
+[[ "$list_output" != *"仅手动"* ]] || fail "列表仍显示已移除的仅手动状态"
 [[ "$list_output" == *"NonGit — 非 Git 安装"* ]] || fail "列表缺少非 Git 扩展"
-details_output="$(sillytavern_extension_show_details "$manual_index")"
-[[ "$details_output" == *"策略：manual"* ]] || fail "扩展详情缺少更新策略"
+details_output="$(sillytavern_extension_show_details "$legacy_index")"
+[[ "$details_output" != *"策略："* ]] || fail "扩展详情仍显示已移除的更新策略"
 [[ "$details_output" == *"Upstream：origin/release"* ]] || fail "扩展详情缺少 upstream"
 [[ "$details_output" == *"ahead / behind：领先 0，落后 1"* ]] || fail "扩展详情缺少 Commit 差异"
 
-selection_input="$((auto_index + 1)),$((manual_index + 1)) $((auto_index + 1)) invalid 999"
+selection_input="$((auto_index + 1)),$((legacy_index + 1)) $((auto_index + 1)) invalid 999"
 sillytavern_extension_parse_selection "$selection_input" || fail "多选解析失败"
 [[ "${#EXTENSION_SELECTED_INDEXES[@]}" == 2 ]] || fail "多选未正确过滤和去重"
 [[ "${EXTENSION_SELECTED_INDEXES[0]}" == "$auto_index" ]] || fail "多选顺序错误"
-[[ "${EXTENSION_SELECTED_INDEXES[1]}" == "$manual_index" ]] || fail "多选第二项错误"
-
-sillytavern_extension_policy_set "自动 扩展" manual || fail "中文空格策略保存失败"
-[[ "$(sillytavern_extension_policy_get "自动 扩展")" == "manual" ]] || fail "手动策略读取失败"
-grep -Fq '# test policy file' "$STERMUX_ROOT/config/extension-policy.conf" \
-    || fail "保存策略时丢失原有注释"
-sillytavern_extension_policy_set "自动 扩展" auto || fail "取消手动策略失败"
-[[ "$(sillytavern_extension_policy_get "自动 扩展")" == "auto" ]] || fail "默认 auto 策略恢复失败"
-if sillytavern_extension_policy_set "bad=name" manual; then fail "含等号的不安全扩展名意外写入策略"; fi
+[[ "${EXTENSION_SELECTED_INDEXES[1]}" == "$legacy_index" ]] || fail "多选第二项错误"
+[[ "$(< "$STERMUX_ROOT/config/extension-policy.conf")" == "$LEGACY_POLICY_CONTENT" ]] \
+    || fail "扫描或检测过程读取后改写了旧策略文件"
 
 git_pull_rebase_autostash() {
     local repository="$1"
@@ -166,22 +169,26 @@ git_pull_rebase_autostash() {
     git_run_network_command "$repository" pull --rebase --autostash
 }
 
-sillytavern_extension_batch_update explicit "$failure_index" "$auto_index"
+sillytavern_extension_batch_update "$failure_index" "$auto_index"
 [[ "$EXTENSION_BATCH_SUCCESS" == 1 ]] || fail "单项失败后成功扩展未继续更新"
 [[ "$EXTENSION_BATCH_FAILED" == 1 ]] || fail "模拟 pull 失败未计入失败"
 [[ "$(< "$AUTO_PATH/version.txt")" == "version=2-auto" ]] || fail "失败隔离后的扩展未更新"
 [[ "$(< "$FAILURE_PATH/version.txt")" == "version=1" ]] || fail "失败扩展工作区被意外更新"
 
-sillytavern_extension_batch_update auto "$manual_index" "$bulk_index" "$non_git_index"
-[[ "$EXTENSION_BATCH_SUCCESS" == 1 ]] || fail "批量自动更新成功数量错误"
-[[ "$EXTENSION_BATCH_FAILED" == 0 ]] || fail "批量自动更新意外失败"
-[[ "$EXTENSION_BATCH_SKIPPED" == 2 ]] || fail "手动与非 Git 扩展未被正确跳过"
-[[ "$(< "$BULK_PATH/version.txt")" == "version=2-bulk" ]] || fail "允许自动更新的扩展未更新"
-[[ "$(< "$MANUAL_PATH/version.txt")" == "version=1" ]] || fail "仅手动扩展被批量更新"
+sillytavern_extension_batch_update "$legacy_index"
+[[ "$EXTENSION_BATCH_SUCCESS" == 1 ]] || fail "单选扩展更新失败"
+[[ "$(< "$LEGACY_PATH/version.txt")" == "version=2-legacy" ]] || fail "旧策略文件阻止单选更新"
+push_extension_update "$LEGACY_SOURCE" "version=3-legacy" || fail "无法创建更新全部回归提交"
 
-sillytavern_extension_batch_update explicit "$manual_index"
-[[ "$EXTENSION_BATCH_SUCCESS" == 1 ]] || fail "用户主动选择时无法更新仅手动扩展"
-[[ "$(< "$MANUAL_PATH/version.txt")" == "version=2-manual" ]] || fail "仅手动扩展主动更新失败"
+all_indexes=()
+for ((index = 0; index < EXTENSION_TOTAL_COUNT; index++)); do all_indexes+=("$index"); done
+sillytavern_extension_batch_update "${all_indexes[@]}"
+[[ "$EXTENSION_BATCH_SUCCESS" == 2 ]] || fail "更新全部未处理所有可更新 Git 扩展"
+[[ "$EXTENSION_BATCH_FAILED" == 3 ]] || fail "更新全部失败隔离数量错误"
+[[ "$(< "$BULK_PATH/version.txt")" == "version=2-bulk" ]] || fail "更新全部未更新普通扩展"
+[[ "$(< "$LEGACY_PATH/version.txt")" == "version=3-legacy" ]] || fail "旧策略扩展未参与更新全部"
+[[ "$(< "$STERMUX_ROOT/config/extension-policy.conf")" == "$LEGACY_POLICY_CONTENT" ]] \
+    || fail "扩展更新过程改写了旧策略文件"
 
 log_file="$(sillytavern_extension_log_file)"
 [[ -s "$log_file" ]] || fail "扩展更新未写入日志"
@@ -195,7 +202,6 @@ mkdir -p -- "$EXTENSIONS_ROOT/DeleteNonGit" "$EXTENSIONS_ROOT/DeleteFailure" \
 printf '%s\n' delete > "$EXTENSIONS_ROOT/DeleteNonGit/index.js"
 printf '%s\n' keep > "$EXTENSIONS_ROOT/DeleteFailure/index.js"
 printf '%s\n' delete > "$EXTENSIONS_ROOT/DeleteAfterFailure/index.js"
-sillytavern_extension_policy_set DeleteGit manual || fail "无法准备待清理 manual 策略"
 sillytavern_extensions_scan || fail "扩展删除前扫描失败"
 
 delete_git_index="$(extension_index_by_name DeleteGit)" || fail "无法定位待删除 Git 扩展"
@@ -208,8 +214,8 @@ sillytavern_extension_delete_selected "$delete_git_index"
 [[ "$EXTENSION_DELETE_SUCCESS" == 1 && "$EXTENSION_DELETE_FAILED" == 0 ]] \
     || fail "单个 Git 扩展删除结果错误"
 [[ ! -e "$DELETE_GIT_PATH" ]] || fail "单个 Git 扩展未删除"
-[[ "$(sillytavern_extension_policy_get DeleteGit)" == auto ]] \
-    || fail "扩展删除后 manual 策略未同步清理"
+[[ "$(< "$STERMUX_ROOT/config/extension-policy.conf")" == "$LEGACY_POLICY_CONTENT" ]] \
+    || fail "扩展删除过程改写了已停用的旧策略文件"
 
 sillytavern_extensions_scan || fail "非 Git 删除前扫描失败"
 delete_non_git_index="$(extension_index_by_name DeleteNonGit)" || fail "无法定位待删除非 Git 扩展"
@@ -271,4 +277,4 @@ ST_PATH="$TEST_TMP_ROOT/Empty SillyTavern"
 sillytavern_extensions_scan || fail "扩展目录不存在时不应致命失败"
 [[ "$EXTENSION_TOTAL_COUNT" == 0 ]] || fail "空扩展环境仍保留旧扫描结果"
 
-printf '%s\n' 'PASS: 扩展扫描、更新、策略、安全删除、多选及失败隔离测试通过'
+printf '%s\n' 'PASS: 扩展精简菜单、统一更新、旧策略停用、安全删除及失败隔离测试通过'

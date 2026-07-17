@@ -19,6 +19,12 @@ fail() {
     exit 1
 }
 
+leading_space_count() {
+    local value="$1"
+    local leading="${value%%[! ]*}"
+    printf '%s\n' "${#leading}"
+}
+
 STERMUX_ROOT="$PROJECT_ROOT"
 source "$PROJECT_ROOT/core/ui.sh"
 source "$PROJECT_ROOT/core/version.sh"
@@ -86,13 +92,36 @@ ui_initialize
 ui_terminal_supports_color() { return 0; }
 ui_initialize
 [[ -n "$UI_COLOR_GREEN" ]] || fail "颜色开启时没有初始化颜色"
+[[ -n "$UI_COLOR_GRAY" ]] || fail "颜色开启时没有初始化灰色次级文字"
+[[ -n "$UI_COLOR_WHITE" ]] || fail "颜色开启时没有初始化白色主文字"
 colored_text="$(ui_colorize success '中文AB')"
 [[ "$colored_text" == *$'\033[32m'* ]] || fail "成功状态没有绿色"
 [[ "$(ui_display_width "$colored_text")" == 6 ]] || fail "ANSI 颜色影响显示宽度"
+secondary_text="$(ui_secondary_line '次级说明')"
+[[ "$secondary_text" == *$'\033[90m'* ]] || fail "次级说明没有使用灰色"
+primary_text="$(ui_primary_line '主选项')"
+[[ "$primary_text" == *$'\033[37m'* ]] || fail "主选项没有使用白色"
+color_main_menu_output="$(ui_main_menu '1.15.0' 'v0.0.1' '已关闭')"
+[[ "$color_main_menu_output" == *$'\033[37m1. 启动 SillyTavern\033[0m'* \
+    && "$color_main_menu_output" == *$'\033[37m0. 退出\033[0m'* ]] \
+    || fail "主菜单选项没有统一使用白色"
+
+mixed_title="$(ui_colorize warning '中文 Title')"
+centered_title="$(ui_print_centered "$mixed_title")"
+plain_centered_title="$(ui_strip_ansi "$centered_title")"
+expected_padding=$(( (UI_LAYOUT_WIDTH - $(ui_display_width '中文 Title') + 1) / 2 ))
+[[ "$(leading_space_count "$plain_centered_title")" == "$expected_padding" ]] \
+    || fail "带 ANSI 的中英文标题未正确居中"
+mapfile -t header_lines < <(ui_page_header '自动备份保留设置')
+plain_header_title="$(ui_strip_ansi "${header_lines[1]}")"
+expected_padding=$(( (UI_LAYOUT_WIDTH - $(ui_display_width '自动备份保留设置') + 1) / 2 ))
+[[ "$(leading_space_count "$plain_header_title")" == "$expected_padding" ]] \
+    || fail "中文页面标题未通过公共函数正确居中"
 
 COLOR_ENABLED=false
 ui_initialize
 [[ -z "$UI_COLOR_GREEN" ]] || fail "颜色配置关闭后仍有 ANSI 颜色"
+[[ -z "$UI_COLOR_GRAY" && -z "$UI_COLOR_WHITE" ]] || fail "颜色关闭后主次文字仍有 ANSI 颜色"
 [[ "$(ui_colorize success '成功')" == "成功" ]] || fail "颜色关闭未降级为纯文本"
 
 COLOR_ENABLED=true

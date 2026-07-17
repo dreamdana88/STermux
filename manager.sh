@@ -300,11 +300,11 @@ settings_menu() {
         ui_page_header 'STermux 设置'
         printf '\n'
         printf '1. 设置 SillyTavern 路径\n'
-        printf '\n2. 脚本自启：%s\n' "$(autostart_status_text)"
-        printf '\n3. 颜色显示：%s\n' "$(settings_color_status_text)"
+        printf '2. 脚本自启：%s\n' "$(autostart_status_text)"
+        printf '3. 颜色显示：%s\n' "$(settings_color_status_text)"
         printf '\n4. 查看当前 SillyTavern 路径\n'
         printf '5. 查看 STermux 版本信息\n'
-        printf '6. 卸载管理\n'
+        printf '\n6. 卸载管理\n'
         printf '\n0. 返回主菜单\n\n'
         ui_menu_prompt '0-6'
         IFS= read -r choice || return 0

@@ -6,6 +6,8 @@ UI_COLOR_BLUE=''
 UI_COLOR_GREEN=''
 UI_COLOR_YELLOW=''
 UI_COLOR_RED=''
+UI_COLOR_GRAY=''
+UI_COLOR_WHITE=''
 UI_LAYOUT_WIDTH=44
 
 ui_terminal_supports_color() {
@@ -19,6 +21,8 @@ ui_initialize() {
     UI_COLOR_GREEN=''
     UI_COLOR_YELLOW=''
     UI_COLOR_RED=''
+    UI_COLOR_GRAY=''
+    UI_COLOR_WHITE=''
 
     if [[ "${COLOR_ENABLED:-true}" == true \
         && -z "${NO_COLOR+x}" ]] \
@@ -29,6 +33,8 @@ ui_initialize() {
         UI_COLOR_GREEN=$'\033[32m'
         UI_COLOR_YELLOW=$'\033[33m'
         UI_COLOR_RED=$'\033[31m'
+        UI_COLOR_GRAY=$'\033[90m'
+        UI_COLOR_WHITE=$'\033[37m'
     fi
 
     UI_LAYOUT_WIDTH="$(ui_terminal_width)"
@@ -105,6 +111,8 @@ ui_color_code() {
         success) printf '%s' "$UI_COLOR_GREEN" ;;
         warning) printf '%s' "$UI_COLOR_YELLOW" ;;
         error) printf '%s' "$UI_COLOR_RED" ;;
+        secondary) printf '%s' "$UI_COLOR_GRAY" ;;
+        primary) printf '%s' "$UI_COLOR_WHITE" ;;
         *) printf '%s' '' ;;
     esac
 }
@@ -129,10 +137,20 @@ ui_print_centered() {
     local padding
 
     width="$(ui_display_width "$text")"
-    padding=$(( (UI_LAYOUT_WIDTH - width) / 2 ))
+    padding=$(( (UI_LAYOUT_WIDTH - width + 1) / 2 ))
     (( padding > 0 )) || padding=0
     printf '%*s' "$padding" ''
     ui_colorize "$role" "$text"
+    printf '\n'
+}
+
+ui_primary_line() {
+    ui_colorize primary "$1"
+    printf '\n'
+}
+
+ui_secondary_line() {
+    ui_colorize secondary "$1"
     printf '\n'
 }
 
@@ -235,15 +253,18 @@ ui_main_menu() {
     ui_separator
     ui_group_title 'SillyTavern 管理'
     printf '\n'
-    printf '1. 启动 SillyTavern\n'
-    printf '2. SillyTavern 更新中心\n'
-    printf '3. 第三方扩展管理\n'
-    printf '4. 备份与恢复\n\n'
+    ui_primary_line '1. 启动 SillyTavern'
+    ui_primary_line '2. SillyTavern 更新中心'
+    ui_primary_line '3. 第三方扩展管理'
+    ui_primary_line '4. 备份与恢复'
+    printf '\n'
     ui_group_title '系统'
     printf '\n'
-    printf '5. STermux 更新\n'
-    printf '6. 设置\n\n'
-    printf '0. 退出\n\n'
+    ui_primary_line '5. STermux 更新'
+    ui_primary_line '6. 设置'
+    printf '\n'
+    ui_primary_line '0. 退出'
+    printf '\n'
     ui_separator
 }
 
@@ -263,12 +284,15 @@ ui_uninstalled_menu() {
     ui_separator
     ui_group_title 'SillyTavern'
     printf '\n'
-    printf '1. 安装 SillyTavern\n'
-    printf '2. 设置已有 SillyTavern 路径\n\n'
+    ui_primary_line '1. 安装 SillyTavern'
+    ui_primary_line '2. 设置已有 SillyTavern 路径'
+    printf '\n'
     ui_group_title '系统'
     printf '\n'
-    printf '3. STermux 更新\n'
-    printf '4. 设置\n\n'
-    printf '0. 退出\n\n'
+    ui_primary_line '3. STermux 更新'
+    ui_primary_line '4. 设置'
+    printf '\n'
+    ui_primary_line '0. 退出'
+    printf '\n'
     ui_separator
 }
