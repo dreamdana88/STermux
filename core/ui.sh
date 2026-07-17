@@ -65,24 +65,27 @@ ui_display_width() {
     local character
     local width=0
     local index
-    local byte_value
+    local character_value
     local byte_length=1
-    local LC_ALL=C
 
     text="$(ui_strip_ansi "$1")"
     for ((index = 0; index < ${#text}; index++)); do
         character="${text:index:1}"
-        printf -v byte_value '%d' "'$character"
-        (( byte_value >= 0 )) || byte_value=$((byte_value + 256))
-        if (( byte_value >= 32 && byte_value <= 126 )); then
+        printf -v character_value '%d' "'$character"
+        (( character_value >= 0 )) || character_value=$((character_value + 256))
+        if (( character_value >= 32 && character_value <= 126 )); then
             width=$((width + 1))
-        else
+        elif (( character_value > 255 )); then
+            # UTF-8 locale 下 Bash 已按完整字符切片，不能再按字节数跳过后续字符。
             width=$((width + 2))
-            if (( byte_value >= 240 )); then
+        else
+            # C locale 下 Bash 按 UTF-8 字节切片，只在此分支跳过当前字符的续字节。
+            width=$((width + 2))
+            if (( character_value >= 240 )); then
                 byte_length=4
-            elif (( byte_value >= 224 )); then
+            elif (( character_value >= 224 )); then
                 byte_length=3
-            elif (( byte_value >= 192 )); then
+            elif (( character_value >= 192 )); then
                 byte_length=2
             else
                 byte_length=1

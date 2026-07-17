@@ -97,6 +97,12 @@ ui_initialize
 colored_text="$(ui_colorize success '中文AB')"
 [[ "$colored_text" == *$'\033[32m'* ]] || fail "成功状态没有绿色"
 [[ "$(ui_display_width "$colored_text")" == 6 ]] || fail "ANSI 颜色影响显示宽度"
+[[ "$(ui_display_width '仅发布在外神们茶话会社区')" == 24 ]] \
+    || fail "中文社区标题宽度计算错误"
+[[ "$(ui_display_width '自动备份')" == 8 ]] \
+    || fail "中文状态标签宽度计算错误"
+[[ "$(ui_display_width 'STermux 设置')" == 12 ]] \
+    || fail "中英文混排标题宽度计算错误"
 secondary_text="$(ui_secondary_line '次级说明')"
 [[ "$secondary_text" == *$'\033[90m'* ]] || fail "次级说明没有使用灰色"
 primary_text="$(ui_primary_line '主选项')"
@@ -117,6 +123,13 @@ plain_header_title="$(ui_strip_ansi "${header_lines[1]}")"
 expected_padding=$(( (UI_LAYOUT_WIDTH - $(ui_display_width '自动备份保留设置') + 1) / 2 ))
 [[ "$(leading_space_count "$plain_header_title")" == "$expected_padding" ]] \
     || fail "中文页面标题未通过公共函数正确居中"
+[[ "$(leading_space_count "$plain_header_title")" == 14 ]] \
+    || fail "中文页面标题实际左侧留白错误"
+
+status_output="$(ui_status_line '自动备份' '已关闭' warning)"
+plain_status_output="$(ui_strip_ansi "$status_output")"
+[[ "$plain_status_output" == '自动备份    : 已关闭' ]] \
+    || fail "自动备份状态标签产生了多余空格"
 
 COLOR_ENABLED=false
 ui_initialize
