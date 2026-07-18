@@ -35,7 +35,7 @@ config_set_value() {
     local replaced=false
 
     case "$key" in
-        ST_PATH|COLOR_ENABLED|AUTOMATIC_BACKUP_KEEP)
+        ST_PATH|COLOR_ENABLED|AUTOMATIC_BACKUP_KEEP|AUTO_BACKUP_ENABLED|AUTO_BACKUP_INTERVAL_DAYS)
             ;;
         *)
             printf '拒绝保存未知配置项：%s\n' "$key" >&2
@@ -82,7 +82,7 @@ config_remove_value() {
     local line
 
     case "$key" in
-        ST_PATH|COLOR_ENABLED|AUTOMATIC_BACKUP_KEEP)
+        ST_PATH|COLOR_ENABLED|AUTOMATIC_BACKUP_KEEP|AUTO_BACKUP_ENABLED|AUTO_BACKUP_INTERVAL_DAYS)
             ;;
         *)
             printf '拒绝删除未知配置项：%s\n' "$key" >&2

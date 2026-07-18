@@ -35,6 +35,7 @@ load_script_file "$STERMUX_ROOT/core/uninstall.sh"
 load_script_file "$STERMUX_ROOT/modules/stermux/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/backup-rules.sh"
+load_script_file "$STERMUX_ROOT/core/scheduler.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/extensions.sh"
 
@@ -356,8 +357,8 @@ show_main_menu() {
         if [[ "$sillytavern_version" == "unknown" || -z "$sillytavern_version" ]]; then
             sillytavern_version="版本未知"
         fi
-        # Phase 5 计划备份尚未实现，不能将 protective 备份误显示为自动备份已开启。
-        ui_main_menu "$sillytavern_version" "$stermux_version" "已关闭"
+        ui_main_menu "$sillytavern_version" "$stermux_version" \
+            "$(backup_scheduler_status_text)"
     else
         SILLYTAVERN_IS_INSTALLED=false
         ui_uninstalled_menu "$stermux_version"
@@ -451,6 +452,11 @@ main() {
     ui_initialize
 
     detect_sillytavern_path || true
+    if backup_scheduler_enabled; then
+        if ! backup_scheduler_check; then
+            ui_warning "自动备份检查未完成：$AUTO_BACKUP_LAST_ERROR"
+        fi
+    fi
     main_loop
 }
 

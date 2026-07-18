@@ -1,5 +1,6 @@
 # Runtime state
 data/state/*.log
+data/state/automatic-backup.conf*
 data/logs/*.log
 config/user.conf
 backups/

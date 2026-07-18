@@ -433,7 +433,7 @@ backup_delete_path() {
 }
 
 backup_rotate_automatic() {
-    local keep index automatic_seen=0 failed=0 last_error=""
+    local keep index automatic_seen=0 removed=0 failed=0 last_error=""
 
     keep="$(backup_automatic_keep_value)"
     backup_inventory_scan || return 1
@@ -444,14 +444,20 @@ backup_rotate_automatic() {
                 if ! backup_delete_path "${BACKUP_PATHS[index]}" automatic; then
                     failed=$((failed + 1))
                     last_error="$BACKUP_LAST_ERROR"
+                else
+                    removed=$((removed + 1))
                 fi
             fi
         fi
     done
     if (( failed > 0 )); then
         BACKUP_LAST_ERROR="自动备份池有 $failed 个旧备份清理失败：$last_error"
+        backup_log rotate failed automatic-pool \
+            "keep=$keep;seen=$automatic_seen;removed=$removed;failed=$failed" || true
         return 1
     fi
+    backup_log rotate success automatic-pool \
+        "keep=$keep;seen=$automatic_seen;removed=$removed" || true
 }
 
 backup_automatic_count() {
@@ -497,35 +503,90 @@ backup_set_automatic_keep() {
     return 0
 }
 
+backup_toggle_automatic_interactive() {
+    local target action confirm
+
+    if backup_scheduler_enabled; then
+        target=false
+        action="关闭"
+    else
+        target=true
+        action="开启"
+    fi
+    printf '确认%s自动备份？[y/N] ' "$action"
+    IFS= read -r confirm || return 1
+    if [[ "$confirm" != y && "$confirm" != Y ]]; then
+        ui_info "已取消${action}自动备份。"
+        return 0
+    fi
+    if backup_scheduler_set_enabled "$target"; then
+        ui_success "已${action}自动备份。"
+    else
+        ui_error "$AUTO_BACKUP_LAST_ERROR"
+        return 1
+    fi
+}
+
+backup_set_interval_interactive() {
+    local input
+
+    printf '请输入备份频率天数 [1-30]：'
+    IFS= read -r input || input=""
+    if backup_scheduler_set_interval_days "$input"; then
+        ui_success "备份频率已设置为每 $(backup_scheduler_interval_days) 天。"
+    else
+        ui_error "$AUTO_BACKUP_LAST_ERROR"
+        return 1
+    fi
+}
+
+backup_set_keep_interactive() {
+    local input status=0
+
+    printf '请输入新的最大数量 [1-20]：'
+    IFS= read -r input || input=""
+    backup_set_automatic_keep "$input" || status=$?
+    case "$status" in
+        0) ui_success "最大自动备份数量已设置为 $(backup_automatic_keep_value) 份。" ;;
+        2) ui_info "已取消修改，配置和备份均未改变。" ;;
+        *) ui_error "$BACKUP_LAST_ERROR"; return 1 ;;
+    esac
+}
+
 backup_automatic_settings_menu() {
-    local choice input status
+    local choice
 
     while true; do
         ui_clear
-        ui_page_header '自动备份保留设置'
-        printf '\n最大自动备份数量：%s 份\n\n' "$(backup_automatic_keep_value)"
-        printf '1. 设置最大自动备份数量\n\n'
+        ui_page_header '自动备份设置'
+        printf '\n自动备份：%s\n' "$(backup_scheduler_status_text)"
+        printf '备份频率：每 %s 天\n' "$(backup_scheduler_interval_days)"
+        printf '下次备份：%s\n' "$(backup_scheduler_next_display)"
+        printf '最大自动备份数量：%s 份\n\n' "$(backup_automatic_keep_value)"
+        printf '1. 开启 / 关闭自动备份\n'
+        printf '2. 设置备份频率\n'
+        printf '3. 设置最大自动备份数量\n\n'
         printf '0. 返回\n\n'
-        ui_menu_prompt '0-1'
+        ui_menu_prompt '0-3'
         IFS= read -r choice || return 0
         case "$choice" in
             1)
-                printf '请输入新的最大数量 [1-20]：'
-                IFS= read -r input || input=""
-                status=0
-                backup_set_automatic_keep "$input" || status=$?
-                case "$status" in
-                    0) ui_success "最大自动备份数量已设置为 $(backup_automatic_keep_value) 份。" ;;
-                    2) ui_info "已取消修改，配置和备份均未改变。" ;;
-                    *) ui_error "$BACKUP_LAST_ERROR" ;;
-                esac
+                backup_toggle_automatic_interactive || true
+                ui_pause
+                ;;
+            2)
+                backup_set_interval_interactive || true
+                ui_pause
+                ;;
+            3)
+                backup_set_keep_interactive || true
                 ui_pause
                 ;;
             0)
                 return 0
                 ;;
             *)
-                ui_warning '无效选项，请输入 0 或 1。'
+                ui_warning '无效选项，请输入 0 到 3。'
                 ui_pause
                 ;;
         esac
@@ -882,7 +943,7 @@ backup_menu() {
     while true; do
         ui_clear
         ui_page_header '备份与恢复'
-        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n6. 自动备份保留设置\n\n0. 返回主菜单\n\n'
+        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n6. 自动备份设置\n\n0. 返回主菜单\n\n'
         ui_menu_prompt '0-6'
         IFS= read -r choice || return 0
         case "$choice" in

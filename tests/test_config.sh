@@ -26,6 +26,10 @@ fail() {
 mkdir -p -- "$TEST_TMP_ROOT/config" || exit 1
 grep -Fxq 'AUTOMATIC_BACKUP_KEEP=2' "$PROJECT_ROOT/config/default.conf" \
     || fail "项目默认自动备份保留数量不是 2"
+grep -Fxq 'AUTO_BACKUP_ENABLED=false' "$PROJECT_ROOT/config/default.conf" \
+    || fail "自动备份默认值不是关闭"
+grep -Fxq 'AUTO_BACKUP_INTERVAL_DAYS=7' "$PROJECT_ROOT/config/default.conf" \
+    || fail "自动备份默认频率不是 7 天"
 grep -Fxq 'BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"' "$PROJECT_ROOT/config/default.conf" \
     || fail "项目默认备份根目录配置缺失"
 grep -Fxq 'AUTO_BACKUP_BEFORE_UPDATE=true' "$PROJECT_ROOT/config/default.conf" \
@@ -37,6 +41,8 @@ grep -Fxq 'COLOR_ENABLED=true' "$PROJECT_ROOT/config/default.conf" \
 printf '%s\n' \
     'ST_PATH="$HOME/SillyTavern"' \
     'AUTOMATIC_BACKUP_KEEP=2' \
+    'AUTO_BACKUP_ENABLED=false' \
+    'AUTO_BACKUP_INTERVAL_DAYS=7' \
     'COLOR_ENABLED=true' \
     'FUTURE_SETTING="default"' \
     > "$TEST_TMP_ROOT/config/default.conf"
@@ -49,6 +55,8 @@ source "$PROJECT_ROOT/core/config.sh"
 config_load || fail "无法加载配置"
 [[ "$ST_PATH" == "$HOME/SillyTavern" ]] || fail "默认 ST_PATH 未加载"
 [[ "$AUTOMATIC_BACKUP_KEEP" == 2 ]] || fail "默认自动备份保留数量未加载为 2"
+[[ "$AUTO_BACKUP_ENABLED" == false ]] || fail "旧配置缺少字段时未安全使用关闭默认值"
+[[ "$AUTO_BACKUP_INTERVAL_DAYS" == 7 ]] || fail "旧配置缺少字段时未安全使用 7 天默认值"
 [[ "$COLOR_ENABLED" == true ]] || fail "默认颜色设置未加载"
 [[ "$FUTURE_SETTING" == "keep-me" ]] || fail "用户配置未覆盖默认配置"
 
@@ -70,6 +78,13 @@ config_set_value "AUTOMATIC_BACKUP_KEEP" "5" || fail "无法保存自动备份�
 unset AUTOMATIC_BACKUP_KEEP
 source "$TEST_TMP_ROOT/config/user.conf"
 [[ "$AUTOMATIC_BACKUP_KEEP" == 5 ]] || fail "自动备份保留数量未持久化"
+
+config_set_value "AUTO_BACKUP_ENABLED" "true" || fail "无法保存自动备份开关"
+config_set_value "AUTO_BACKUP_INTERVAL_DAYS" "14" || fail "无法保存自动备份频率"
+unset AUTO_BACKUP_ENABLED AUTO_BACKUP_INTERVAL_DAYS
+source "$TEST_TMP_ROOT/config/user.conf"
+[[ "$AUTO_BACKUP_ENABLED" == true ]] || fail "自动备份开关未持久化"
+[[ "$AUTO_BACKUP_INTERVAL_DAYS" == 14 ]] || fail "自动备份频率未持久化"
 
 config_remove_value "ST_PATH" || fail "无法移除保存的 ST_PATH"
 if grep -Eq '^ST_PATH=' "$TEST_TMP_ROOT/config/user.conf"; then

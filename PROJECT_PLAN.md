@@ -199,7 +199,7 @@ GPT-SoVITS 相关工具
 ============================================
 
 SillyTavern : 1.15.0
-STermux     : v0.0.1
+STermux     : v0.0.2
 自动备份    : 已关闭
 
 --------------------------------------------
@@ -219,7 +219,7 @@ STermux     : v0.0.1
 --------------------------------------------
 ```
 
-首页摘要只读取本地 SillyTavern 版本、统一 `VERSION` 中的 STermux 版本，以及计划备份的真实启用状态。不得在绘制首页时 fetch、扫描扩展远程状态、计算备份校验或显示路径和 Git 技术信息。Phase 5 尚未实现时，不能把更新前 protective 备份误显示为自动备份已开启。
+首页摘要只读取本地 SillyTavern 版本、统一 `VERSION` 中的 STermux 版本，以及计划备份的真实启用状态。不得在绘制首页时 fetch、扫描扩展远程状态、计算备份校验或显示路径和 Git 技术信息。自动备份默认关闭，首页不得把更新前 protective 备份误显示为计划备份已开启。
 
 即使网络不可用，用户仍然必须能够：
 
@@ -331,9 +331,6 @@ ST-Manager-Termux/
 ├── backups/
 │   └── sillytavern/
 │
-├── scripts/
-│   └── scheduled-backup.sh
-│
 ├── docs/
 │   ├── MODULE_GUIDE.md
 │   ├── BACKUP_DESIGN.md
@@ -351,7 +348,6 @@ ST-Manager-Termux/
 - `config/` 放默认配置和用户配置；旧扩展策略文件仅为升级兼容保留。
 - `data/` 放运行状态、缓存和日志。
 - `backups/` 放备份数据。
-- `scripts/` 放可被后台调度器独立调用的脚本。
 
 ---
 
@@ -395,9 +391,8 @@ BACKUP_ROOT="$STERMUX_ROOT/backups/sillytavern"
 AUTO_BACKUP_BEFORE_UPDATE=true
 AUTO_BACKUP_BEFORE_ROLLBACK=true
 
-SCHEDULED_BACKUP_ENABLED=false
-SCHEDULED_BACKUP_INTERVAL="daily"
-SCHEDULED_BACKUP_TIME="03:00"
+AUTO_BACKUP_ENABLED=false
+AUTO_BACKUP_INTERVAL_DAYS=7
 
 # protective、scheduled、catchup 共用自动备份保留池。
 AUTOMATIC_BACKUP_KEEP=2
@@ -865,12 +860,12 @@ manual、protective、scheduled、catchup 必须通过统一 `backup_create` 使
 
 ## 20.3 scheduled
 
-后台计划任务创建。
+STermux 启动时的轻量到期检查创建。
 
 默认频率：
 
 ```text
-daily
+每 7 天
 ```
 
 保留 `scheduled` 类型标记，用于展示备份来源和日志记录。
@@ -898,28 +893,30 @@ catchup 本质上属于自动备份，归入统一的自动备份保留池。
 设置界面：
 
 ```text
-定时备份
+自动备份设置
 
-状态：已开启
-频率：每天
-计划时间：03:00
-最近成功：2026-07-15 03:02
-下一次计划：2026-07-16
-自动备份总保留：2
+自动备份：已开启
+备份频率：每 7 天
+下次备份：2026-07-25 10:00
+最大自动备份数量：2 份
+
+1. 开启 / 关闭自动备份
+2. 设置备份频率
+3. 设置最大自动备份数量
 ```
 
 V1 支持：
 
 ```text
 关闭
-每天
-每周
+开启
+每 1 到 30 天
 ```
 
 未来可扩展：
 
 ```text
-每 N 天
+指定每日时刻
 自定义 Cron 表达式
 ```
 
@@ -927,35 +924,23 @@ V1 支持：
 
 # 22. 定时备份调度原则
 
-定时备份需要独立脚本：
-
-```text
-scripts/scheduled-backup.sh
-```
-
-该脚本必须可以在不进入交互菜单的情况下执行。
-
 调度层放在：
 
 ```text
 core/scheduler.sh
 ```
 
-要求：
+V1 采用无后台服务的轻量检查：
 
 ```text
-检测当前 Termux 环境可用的后台调度能力
-注册定时任务
-更新定时任务
-取消定时任务
-查询调度状态
+STermux 启动并完成路径检测后检查一次
+不在主菜单每次刷新时重复检查
+不要求 cron 常驻服务
+不强制依赖 Termux:API 或 Termux:Boot
+不注册系统级后台服务
 ```
 
-具体采用哪一种 Termux 后台调度方案，需要在实施阶段根据当前环境、依赖和 Android 兼容性验证后决定。
-
-不得假设后台任务永远可靠。
-
-因此必须同时实现“逾期补偿备份”。
+时间状态使用 epoch 保存到 `data/state/automatic-backup.conf`。状态缺失或损坏时，只从当前时间建立下一次未来计划，不立即生成历史补做备份。scheduled 或 catchup 备份成功后才原子更新时间状态；失败时保留原到期时间，下次启动继续尝试。
 
 ---
 
@@ -964,7 +949,7 @@ core/scheduler.sh
 每次进入 STermux 时：
 
 ```text
-读取最近成功 scheduled/catchup 备份时间
+读取下一次计划 epoch
     ↓
 读取当前计划周期
     ↓
@@ -974,8 +959,6 @@ core/scheduler.sh
 若逾期：
 
 ```text
-提示用户检测到备份逾期
-    ↓
 执行 catchup 补偿备份
     ↓
 记录结果
@@ -985,22 +968,9 @@ core/scheduler.sh
 
 一次逾期检测最多创建 1 份 catchup。不得根据错过天数或错过周期数循环补做多份历史备份。
 
-建议允许配置：
-
-```text
-AUTO_CATCHUP_BACKUP=true
-```
-
-如果关闭自动补偿：
-
-```text
-只提示
-不自动执行
-```
-
 核心目标：
 
-> 即使 Android 后台调度偶尔失效，用户下一次进入 STermux 时也能自动发现并补做备份。
+> 即使用户长时间没有运行 STermux，下一次进入时也只补做一份备份，不按错过周期批量生成。
 
 ---
 
@@ -1945,10 +1915,10 @@ pull 失败
 
 ### 版本显示
 
-STermux 使用项目根目录 `VERSION` 作为单一可信版本来源，初始版本为：
+STermux 使用项目根目录 `VERSION` 作为单一可信版本来源，Phase 5 版本为：
 
 ```text
-v0.0.1
+v0.0.2
 ```
 
 版本号只用于用户友好展示，不替代 Git upstream 与 Commit 状态判断。Git Commit 信息仅在技术详情显示。
@@ -2119,7 +2089,7 @@ ANSI 安全的中文及中英文混排标题居中
 不改变 Git 扩展的既有安全检查、失败隔离与日志规则
 不修改 autostart 托管区域
 首页不执行网络操作或耗时扫描
-Phase 5 未实现前自动备份不得显示为已开启
+首页自动备份状态只反映 AUTO_BACKUP_ENABLED，不得把 protective 备份误当成计划备份已开启
 ```
 
 完成标准：
@@ -2158,22 +2128,23 @@ Phase 4 增强：自动备份池最大保留数量设置
 ```text
 定时备份配置
 scheduler 抽象层
-scheduled-backup.sh
-后台调度注册
-后台调度取消
+启动时单次到期检查
+epoch 时间状态
+自动备份开关与每 N 天频率
 最近成功备份状态
 逾期检测
 catchup 补偿备份
 一次逾期只补做一份 catchup
 备份自动轮换
-备份健康提醒
+失败保留到期状态并在下次启动重试
 ```
 
 完成标准：
 
 ```text
-定时备份可以独立运行
-后台任务失效后可以在下次进入 STermux 时发现并补偿
+自动备份开启后可在 STermux 启动时完成到期检查
+长时间未运行后可以在下次进入 STermux 时发现并补偿
+不需要常驻后台服务或额外 Termux 插件
 ```
 
 ---

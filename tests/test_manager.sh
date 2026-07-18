@@ -33,6 +33,7 @@ create_isolated_project() {
         "$PROJECT_ROOT/core/config.sh" \
         "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
+        "$PROJECT_ROOT/core/scheduler.sh" \
         "$PROJECT_ROOT/core/uninstall.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
@@ -86,6 +87,7 @@ run_user_config_isolation_regression() {
         "$PROJECT_ROOT/core/config.sh" \
         "$PROJECT_ROOT/core/autostart.sh" \
         "$PROJECT_ROOT/core/backup.sh" \
+        "$PROJECT_ROOT/core/scheduler.sh" \
         "$PROJECT_ROOT/core/uninstall.sh" \
         "$PROJECT_ROOT/core/git.sh" \
         "$PROJECT_ROOT/core/ui.sh" \
@@ -147,8 +149,8 @@ status=$?
 [[ "$output" == *"TEST_MANAGER_LAUNCH_OK"* ]] || fail "未调用 SillyTavern Fixture start.sh"
 [[ "$output" != *"1. 安装 SillyTavern"* ]] || fail "已有 SillyTavern 时仍显示安装入口"
 [[ "$output" == *"SillyTavern : 1.15.0"* ]] || fail "主菜单未显示本地 SillyTavern 版本"
-[[ "$output" == *"STermux     : v0.0.1"* ]] || fail "主菜单未显示 STermux VERSION"
-[[ "$output" == *"自动备份    : 已关闭"* ]] || fail "Phase 5 未实现时自动备份状态不正确"
+[[ "$output" == *"STermux     : v0.0.2"* ]] || fail "主菜单未显示 STermux VERSION"
+[[ "$output" == *"自动备份    : 已关闭"* ]] || fail "默认自动备份状态不正确"
 [[ "$output" == *"SillyTavern 首次启动需要安装 Node Modules"* ]] || fail "首次启动缺少 Node Modules 耗时提示"
 [[ "$output" == *"此过程可能需要几分钟"* ]] || fail "首次启动缺少耐心等待提示"
 
@@ -156,6 +158,21 @@ unset ST_PATH
 source "$isolated_project/config/user.conf"
 [[ -d "$ST_PATH" ]] || fail "自动发现的路径未正确保存"
 [[ "$ST_PATH" == */home/SillyTavern ]] || fail "保存了意外的安装路径"
+
+printf '%s\n' 'AUTO_BACKUP_ENABLED=true' 'AUTO_BACKUP_INTERVAL_DAYS=7' \
+    >> "$isolated_project/config/user.conf" || fail "无法准备自动备份首页 Fixture"
+automatic_home_output="$(printf '0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+automatic_home_status=$?
+(( automatic_home_status == 0 )) || fail "自动备份首页状态运行失败"
+[[ "$automatic_home_output" == *"自动备份    : 已开启"* ]] \
+    || fail "manager 首页没有显示真实自动备份开启状态"
+[[ -f "$isolated_project/data/state/automatic-backup.conf" ]] \
+    || fail "manager 启动时没有初始化自动备份时间状态"
+(
+    STERMUX_ROOT="$isolated_project"
+    source "$PROJECT_ROOT/core/config.sh"
+    config_set_value AUTO_BACKUP_ENABLED false
+) || fail "无法恢复隔离自动备份关闭状态"
 
 update_menu_output="$(printf '2\n4\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 update_menu_status=$?
@@ -168,7 +185,7 @@ self_update_output="$(printf '5\n3\n\n0\n0\n' | HOME="$test_home" bash "$isolate
 self_update_status=$?
 (( self_update_status == 0 )) || fail "STermux 更新菜单返回退出码 $self_update_status"
 [[ "$self_update_output" == *"STermux 更新"* ]] || fail "主菜单未进入 STermux 更新页面"
-[[ "$self_update_output" == *"当前版本 : v0.0.1"* ]] || fail "STermux 更新页面未使用统一 VERSION"
+[[ "$self_update_output" == *"当前版本 : v0.0.2"* ]] || fail "STermux 更新页面未使用统一 VERSION"
 [[ "$self_update_output" == *"STermux 更新技术详情"* ]] || fail "STermux 更新页面缺少技术详情"
 
 extension_menu_output="$(printf '3\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
@@ -200,7 +217,7 @@ settings_status=$?
 [[ "$settings_output" == *$'1. 设置 SillyTavern 路径\n2. 脚本自启：已关闭（Bash）\n3. 颜色显示：已开启\n\n4. 查看当前 SillyTavern 路径\n5. 查看 STermux 版本信息\n\n6. 卸载管理'* ]] \
     || fail "设置菜单逻辑分组空行错误"
 [[ "$settings_output" == *"当前 SillyTavern 路径："* ]] || fail "设置页面无法查看当前路径"
-[[ "$settings_output" == *"STermux 版本：v0.0.1"* ]] || fail "设置页面无法查看 STermux 版本"
+[[ "$settings_output" == *"STermux 版本：v0.0.2"* ]] || fail "设置页面无法查看 STermux 版本"
 [[ "$settings_output" != *"[路径]"* && "$settings_output" != *"[启动]"* ]] \
     || fail "设置页不应为单个功能增加分组标题"
 

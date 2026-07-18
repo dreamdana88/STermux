@@ -66,15 +66,18 @@ source "$PROJECT_ROOT/core/ui.sh"
 source "$PROJECT_ROOT/core/git.sh"
 source "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh"
 source "$PROJECT_ROOT/core/backup.sh"
+source "$PROJECT_ROOT/core/scheduler.sh"
 ui_initialize
 
 unset AUTOMATIC_BACKUP_KEEP
 [[ "$(backup_automatic_keep_value)" == 2 ]] || fail "旧配置缺少保留字段时未回退到 2"
 AUTOMATIC_BACKUP_KEEP=2
 automatic_settings_output="$(printf '0\n' | backup_automatic_settings_menu 2>&1)"
-[[ "$automatic_settings_output" == *"自动备份保留设置"* \
-    && "$automatic_settings_output" == *$'最大自动备份数量：2 份\n\n1. 设置最大自动备份数量'* ]] \
-    || fail "自动备份保留设置页信息区与选项排版错误"
+[[ "$automatic_settings_output" == *"自动备份设置"* \
+    && "$automatic_settings_output" == *"自动备份：已关闭"* \
+    && "$automatic_settings_output" == *"下次备份：未安排"* \
+    && "$automatic_settings_output" == *$'最大自动备份数量：2 份\n\n1. 开启 / 关闭自动备份\n2. 设置备份频率\n3. 设置最大自动备份数量'* ]] \
+    || fail "自动备份设置页信息区与选项排版错误"
 
 backup_current_epoch() { printf '%s\n' "$TEST_BACKUP_EPOCH"; }
 backup_current_display_time() { printf 'test-time-%s\n' "$TEST_BACKUP_EPOCH"; }
