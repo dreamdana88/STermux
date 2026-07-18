@@ -16,6 +16,7 @@ ST_ROLLBACK_LAST_TARGET_VERSION="unknown"
 ST_ROLLBACK_LAST_BACKUP_RESULT="not_run"
 ST_ROLLBACK_LAST_GIT_RESULT="not_run"
 ST_ROLLBACK_LAST_DEPENDENCY_RESULT="not_run"
+ST_ROLLBACK_MAX_VERSIONS=5
 
 declare -a ST_ROLLBACK_VERSIONS=()
 declare -a ST_ROLLBACK_TAGS=()
@@ -148,6 +149,7 @@ sillytavern_rollback_collect_versions() {
         ST_ROLLBACK_VERSIONS+=("$version")
         ST_ROLLBACK_TAGS+=("$tag")
         ST_ROLLBACK_COMMITS+=("$commit")
+        (( ${#ST_ROLLBACK_VERSIONS[@]} >= ST_ROLLBACK_MAX_VERSIONS )) && break
     done
     (( ${#ST_ROLLBACK_VERSIONS[@]} > 0 ))
 }
@@ -372,7 +374,7 @@ sillytavern_rollback_show_versions() {
 
     ui_page_header 'SillyTavern 版本回退'
     printf '\n当前版本：%s\n\n' "$ST_ROLLBACK_CURRENT_VERSION"
-    printf '可回退版本：\n\n'
+    printf '可回退版本（最多显示最近 %s 个）：\n\n' "$ST_ROLLBACK_MAX_VERSIONS"
     for ((index = 0; index < ${#ST_ROLLBACK_VERSIONS[@]}; index++)); do
         printf '%d. %s\n' "$((index + 1))" "${ST_ROLLBACK_VERSIONS[index]}"
     done

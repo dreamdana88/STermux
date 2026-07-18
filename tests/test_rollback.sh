@@ -40,13 +40,16 @@ commit_version() {
     git_quiet -C "$source_repo" tag "$version" || fail "无法创建 tag $version"
 }
 
+commit_version 1.12.0
+commit_version 1.13.0
+commit_version 1.14.0
 commit_version 1.15.0
 commit_version 1.16.0
 git_quiet -C "$source_repo" tag v1.16.0 || fail "无法创建无效 v 前缀 tag"
 commit_version 1.17.0
 git_quiet -C "$source_repo" tag 1.17.0-beta || fail "无法创建测试版 tag"
 commit_version 1.18.0
-git_quiet -C "$source_repo" tag 1.14.0 || fail "无法创建版本不匹配 tag"
+git_quiet -C "$source_repo" tag 1.11.0 || fail "无法创建版本不匹配 tag"
 git_quiet -C "$source_repo" tag invalid-tag || fail "无法创建无效 tag"
 git_quiet -C "$source_repo" push -u "$remote_repo" release --tags || fail "无法推送版本 Fixture"
 git_quiet clone -b release "$remote_repo" "$local_repo" || fail "无法克隆回退测试仓库"
@@ -103,18 +106,23 @@ backup_create() {
 }
 
 sillytavern_rollback_refresh_versions || fail "无法列出回退版本：$ST_ROLLBACK_ERROR"
-[[ ${#ST_ROLLBACK_VERSIONS[@]} -eq 3 ]] || fail "有效回退版本数量错误"
-[[ "${ST_ROLLBACK_VERSIONS[*]}" == "1.17.0 1.16.0 1.15.0" ]] \
+[[ ${#ST_ROLLBACK_VERSIONS[@]} -eq 5 ]] || fail "回退列表未限制为最近 5 个有效版本"
+[[ "${ST_ROLLBACK_VERSIONS[*]}" == "1.17.0 1.16.0 1.15.0 1.14.0 1.13.0" ]] \
     || fail "正式版本未按语义版本倒序显示：${ST_ROLLBACK_VERSIONS[*]}"
 [[ " ${ST_ROLLBACK_VERSIONS[*]} " != *" 1.18.0 "* ]] || fail "当前版本出现在回退列表"
+[[ " ${ST_ROLLBACK_VERSIONS[*]} " != *" 1.12.0 "* ]] || fail "超过最近 5 个的旧版本仍出现在列表"
 [[ " ${ST_ROLLBACK_TAGS[*]} " != *" v1.16.0 "* \
     && " ${ST_ROLLBACK_TAGS[*]} " != *" 1.17.0-beta "* \
-    && " ${ST_ROLLBACK_TAGS[*]} " != *" 1.14.0 "* ]] || fail "无效或版本不匹配 tag 未过滤"
+    && " ${ST_ROLLBACK_TAGS[*]} " != *" 1.11.0 "* ]] || fail "无效或版本不匹配 tag 未过滤"
+
+versions_output="$(sillytavern_rollback_show_versions)"
+[[ "$versions_output" == *"最多显示最近 5 个"* ]] || fail "回退页面未说明最近 5 个上限"
+[[ "$versions_output" != *"1.12.0"* ]] || fail "回退页面显示了第 6 个旧版本"
 
 real_fetch_tags_definition="$(declare -f git_fetch_tags)"
 git_fetch_tags() { GIT_LAST_ERROR="mock offline"; return 1; }
 sillytavern_rollback_refresh_versions || fail "网络失败时没有回退到本地 tag"
-[[ "$ST_ROLLBACK_FETCH_STATUS" == failed && ${#ST_ROLLBACK_VERSIONS[@]} -eq 3 ]] \
+[[ "$ST_ROLLBACK_FETCH_STATUS" == failed && ${#ST_ROLLBACK_VERSIONS[@]} -eq 5 ]] \
     || fail "网络失败本地 tag 降级状态错误"
 eval "$real_fetch_tags_definition"
 
