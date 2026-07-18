@@ -6,6 +6,8 @@ BACKUP_SEQUENCE=0
 BACKUP_DELETE_SUCCESS=0
 BACKUP_DELETE_FAILED=0
 BACKUP_DELETE_SKIPPED=0
+BACKUP_PROGRESS_LAST_DURATION=0
+BACKUP_PROGRESS_CANCELLED=false
 
 declare -a BACKUP_IDS=()
 declare -a BACKUP_PATHS=()
@@ -64,6 +66,57 @@ backup_type_display() {
         catchup) printf '%s\n' "补做备份" ;;
         *) printf '%s\n' "$1" ;;
     esac
+}
+
+backup_elapsed_display() {
+    local seconds="${1:-0}"
+
+    [[ "$seconds" =~ ^[0-9]+$ ]] || seconds=0
+    if (( seconds >= 60 )); then
+        printf '%s 分 %s 秒\n' "$((seconds / 60))" "$((seconds % 60))"
+    else
+        printf '%s 秒\n' "$seconds"
+    fi
+}
+
+backup_run_with_progress() {
+    local step="$1" label="$2"
+    shift 2
+    local heartbeat_interval="${BACKUP_PROGRESS_HEARTBEAT_SECONDS:-10}"
+    local started_seconds=$SECONDS heartbeat_pid status=0 elapsed
+
+    [[ "$heartbeat_interval" =~ ^[1-9][0-9]*$ ]] || heartbeat_interval=10
+    BACKUP_PROGRESS_LAST_DURATION=0
+    BACKUP_PROGRESS_CANCELLED=false
+    ui_info "[$step] 正在$label..."
+    (
+        local heartbeat_elapsed=0 next_heartbeat="$heartbeat_interval"
+        while sleep 0.2; do
+            heartbeat_elapsed=$((SECONDS - started_seconds))
+            if (( heartbeat_elapsed >= next_heartbeat )); then
+                ui_info "[$step] $label：仍在进行，已用时 $(backup_elapsed_display "$heartbeat_elapsed")..."
+                next_heartbeat=$((next_heartbeat + heartbeat_interval))
+            fi
+        done
+    ) &
+    heartbeat_pid=$!
+
+    "$@" || status=$?
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    elapsed=$((SECONDS - started_seconds))
+    (( elapsed >= 0 )) || elapsed=0
+    BACKUP_PROGRESS_LAST_DURATION="$elapsed"
+
+    if (( status == 0 )); then
+        ui_success "[$step] $label：已完成（用时 $(backup_elapsed_display "$elapsed")）"
+        return 0
+    fi
+    if (( status == 130 || status == 143 )); then
+        BACKUP_PROGRESS_CANCELLED=true
+        ui_warning "[$step] $label已由用户取消。"
+    fi
+    return "$status"
 }
 
 backup_automatic_keep_value() {
@@ -200,6 +253,7 @@ backup_create() {
     local root data_root third_party_root staging epoch display_time id final
     local data_archive third_party_archive size data_archive_size config_size
     local third_party_archive_size=0 third_party_status
+    local total_started_seconds=$SECONDS total_duration
 
     BACKUP_LAST_ERROR=""
     BACKUP_LAST_PATH=""
@@ -247,35 +301,48 @@ backup_create() {
     data_archive="$staging/backup.tar.gz"
     third_party_archive="$staging/third-party.tar.gz"
 
-    ui_info "正在创建$(backup_type_display "$type")..."
-    if ! tar -C "$BACKUP_SOURCE_DATA_DIR" -czf "$data_archive" .; then
-        BACKUP_LAST_ERROR="无法归档 SillyTavern data 目录"
+    ui_info "正在创建$(backup_type_display "$type")，大数据备份期间会持续显示已用时间。"
+    if ! backup_run_with_progress '1/4' '归档 SillyTavern data' \
+        tar -C "$BACKUP_SOURCE_DATA_DIR" -czf "$data_archive" .; then
+        if [[ "$BACKUP_PROGRESS_CANCELLED" == true ]]; then
+            BACKUP_LAST_ERROR="用户取消了 SillyTavern data 归档"
+        else
+            BACKUP_LAST_ERROR="无法归档 SillyTavern data 目录"
+        fi
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
     fi
-    if ! backup_archive_is_valid "$data_archive"; then
+    if ! backup_run_with_progress '1/4' '验证 SillyTavern data 归档' \
+        backup_archive_is_valid "$data_archive"; then
         BACKUP_LAST_ERROR="data 备份归档验证失败"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
         return 1
     fi
     if [[ "$third_party_status" == present ]]; then
-        if ! tar -C "$BACKUP_SOURCE_THIRD_PARTY_DIR" -czf "$third_party_archive" .; then
-            BACKUP_LAST_ERROR="无法归档 SillyTavern third-party 目录"
+        if ! backup_run_with_progress '2/4' '归档 third-party 扩展' \
+            tar -C "$BACKUP_SOURCE_THIRD_PARTY_DIR" -czf "$third_party_archive" .; then
+            if [[ "$BACKUP_PROGRESS_CANCELLED" == true ]]; then
+                BACKUP_LAST_ERROR="用户取消了 SillyTavern third-party 归档"
+            else
+                BACKUP_LAST_ERROR="无法归档 SillyTavern third-party 目录"
+            fi
             backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
             backup_staging_remove "$staging" || true
             return 1
         fi
-        if ! backup_archive_is_valid "$third_party_archive"; then
+        if ! backup_run_with_progress '2/4' '验证 third-party 扩展归档' \
+            backup_archive_is_valid "$third_party_archive"; then
             BACKUP_LAST_ERROR="third-party 备份归档验证失败"
             backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
             backup_staging_remove "$staging" || true
             return 1
         fi
     else
-        ui_info "third-party 目录不存在，本次备份已记录为缺失。"
+        ui_info "[2/4] third-party 目录不存在，本次备份已记录为缺失。"
     fi
+    ui_info "[3/4] 正在保存 config.yaml 并生成备份元数据..."
     cp -- "$BACKUP_SOURCE_CONFIG_FILE" "$staging/config.yaml" || {
         BACKUP_LAST_ERROR="无法保存 config.yaml"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
@@ -303,7 +370,9 @@ backup_create() {
         backup_staging_remove "$staging" || true
         return 1
     }
-    if ! backup_directory_is_valid "$staging"; then
+    ui_success "[3/4] 配置与备份元数据已保存。"
+    if ! backup_run_with_progress '4/4' '验证备份完整性' \
+        backup_directory_is_valid "$staging"; then
         BACKUP_LAST_ERROR="备份内容完整性验证失败"
         backup_log create failed "$id" "$BACKUP_LAST_ERROR" || true
         backup_staging_remove "$staging" || true
@@ -322,10 +391,14 @@ backup_create() {
         return 1
     }
     BACKUP_LAST_PATH="$final"
-    backup_log create success "$id" "$type;third-party=$third_party_status" || true
+    total_duration=$((SECONDS - total_started_seconds))
+    (( total_duration >= 0 )) || total_duration=0
+    backup_log create success "$id" \
+        "$type;third-party=$third_party_status;duration_seconds=$total_duration" || true
     if backup_type_is_automatic "$type"; then
         backup_rotate_automatic || ui_warning "备份已创建，但自动备份池清理失败：$BACKUP_LAST_ERROR"
     fi
+    ui_success "备份创建完成（总用时 $(backup_elapsed_display "$total_duration")，大小 $(backup_size_display "$size")）。"
     return 0
 }
 

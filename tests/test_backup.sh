@@ -87,7 +87,28 @@ backup_current_display_time() { printf 'test-time-%s\n' "$TEST_BACKUP_EPOCH"; }
 [[ "$(backup_type_display scheduled)" == "计划备份" ]] || fail "scheduled 中文显示错误"
 [[ "$(backup_type_display catchup)" == "补做备份" ]] || fail "catchup 中文显示错误"
 
-create_backup_at 100 manual "manual fixture" || fail "无法创建 manual 备份：$BACKUP_LAST_ERROR"
+BACKUP_PROGRESS_HEARTBEAT_SECONDS=1
+progress_output="$(backup_run_with_progress '1/1' '执行慢速测试步骤' sleep 2 2>&1)" \
+    || fail "慢速进度展示测试执行失败"
+[[ "$progress_output" == *"[1/1] 正在执行慢速测试步骤"* \
+    && "$progress_output" == *"仍在进行，已用时 1 秒"* \
+    && "$progress_output" == *"执行慢速测试步骤：已完成"* ]] \
+    || fail "长时间备份步骤没有持续显示阶段、心跳和完成状态"
+unset BACKUP_PROGRESS_HEARTBEAT_SECONDS
+
+manual_create_output="$TEST_TMP_ROOT/manual-create-output.txt"
+create_backup_at 100 manual "manual fixture" > "$manual_create_output" 2>&1 \
+    || fail "无法创建 manual 备份：$BACKUP_LAST_ERROR"
+grep -Fq '[1/4] 正在归档 SillyTavern data' "$manual_create_output" \
+    || fail "备份创建未显示 data 归档阶段"
+grep -Fq '[2/4] 正在归档 third-party 扩展' "$manual_create_output" \
+    || fail "备份创建未显示 third-party 归档阶段"
+grep -Fq '[3/4] 正在保存 config.yaml 并生成备份元数据' "$manual_create_output" \
+    || fail "备份创建未显示元数据阶段"
+grep -Fq '[4/4] 正在验证备份完整性' "$manual_create_output" \
+    || fail "备份创建未显示完整性验证阶段"
+grep -Fq '备份创建完成（总用时' "$manual_create_output" \
+    || fail "备份创建未显示总耗时和完成状态"
 MANUAL_PATH="$BACKUP_LAST_PATH"
 MANUAL_ID="$(basename -- "$MANUAL_PATH")"
 [[ -s "$MANUAL_PATH/backup.tar.gz" ]] || fail "manual 归档不存在"
