@@ -720,14 +720,12 @@ backup_delete_selected() {
 }
 
 backup_delete_interactive() {
-    local multiple="$1" input confirm index
+    local input confirm index
     backup_show_list || return 1
     (( ${#BACKUP_IDS[@]} > 0 )) || return 0
-    if [[ "$multiple" == true ]]; then printf '请输入备份编号（支持空格或逗号分隔）：'
-    else printf '请输入一个备份编号：'; fi
+    printf '请输入备份编号（支持单选，或使用空格、逗号多选）：'
     IFS= read -r input || return 1
     backup_parse_selection "$input" || { ui_warning "没有有效的备份编号。"; return 1; }
-    if [[ "$multiple" != true && ${#BACKUP_SELECTED_INDEXES[@]} -ne 1 ]]; then ui_warning "只能选择一个备份。"; return 1; fi
     printf '\n即将删除：\n'
     for index in "${BACKUP_SELECTED_INDEXES[@]}"; do
         printf -- '- %s | %s | %s\n' "${BACKUP_TIMES[index]}" \
@@ -1016,18 +1014,17 @@ backup_menu() {
     while true; do
         ui_clear
         ui_page_header '备份与恢复'
-        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除一个备份\n5. 选择多个备份删除\n6. 自动备份设置\n\n0. 返回主菜单\n\n'
-        ui_menu_prompt '0-6'
+        printf '\n1. 创建手动备份\n2. 查看备份列表\n3. 恢复备份\n4. 删除备份\n5. 自动备份设置\n\n0. 返回主菜单\n\n'
+        ui_menu_prompt '0-5'
         IFS= read -r choice || return 0
         case "$choice" in
             1) if backup_create manual "user-request"; then ui_success "手动备份创建成功：$(basename -- "$BACKUP_LAST_PATH")"; else ui_error "$BACKUP_LAST_ERROR"; fi; ui_pause ;;
             2) backup_show_list || true; ui_pause ;;
             3) backup_restore_interactive || true; ui_pause ;;
-            4) backup_delete_interactive false || true; ui_pause ;;
-            5) backup_delete_interactive true || true; ui_pause ;;
-            6) backup_automatic_settings_menu ;;
+            4) backup_delete_interactive || true; ui_pause ;;
+            5) backup_automatic_settings_menu ;;
             0) return 0 ;;
-            *) ui_warning "无效选项，请输入 0 到 6。"; ui_pause ;;
+            *) ui_warning "无效选项，请输入 0 到 5。"; ui_pause ;;
         esac
     done
 }

@@ -68,10 +68,38 @@ git_current_remote() {
     git -C "$repository" config --get "branch.$branch.remote" 2>/dev/null
 }
 
+git_remote_url() {
+    local repository="$1"
+    local remote="$2"
+
+    git -C "$repository" config --get "remote.$remote.url" 2>/dev/null
+}
+
+git_ref_commit() {
+    local repository="$1"
+    local ref="$2"
+
+    git -C "$repository" rev-parse --verify "${ref}^{commit}" 2>/dev/null
+}
+
+git_commit_is_ancestor() {
+    local repository="$1"
+    local ancestor="$2"
+    local descendant="$3"
+
+    git -C "$repository" merge-base --is-ancestor "$ancestor" "$descendant" 2>/dev/null
+}
+
 git_worktree_has_changes() {
     local repository="$1"
 
     [[ -n "$(git -C "$repository" status --porcelain --untracked-files=normal 2>/dev/null)" ]]
+}
+
+git_tracked_worktree_has_changes() {
+    local repository="$1"
+
+    [[ -n "$(git -C "$repository" status --porcelain --untracked-files=no 2>/dev/null)" ]]
 }
 
 git_has_unmerged_files() {
@@ -145,6 +173,18 @@ git_fetch_upstream() {
     git_run_network_command "$repository" fetch --prune "$remote"
 }
 
+git_fetch_tags() {
+    local repository="$1"
+    local remote
+
+    remote="$(git_current_remote "$repository")" || {
+        GIT_LAST_ERROR="无法确定当前分支的远程仓库"
+        return 1
+    }
+    [[ "$remote" != "." ]] || return 0
+    git_run_network_command "$repository" fetch --prune --tags "$remote"
+}
+
 git_compare_upstream() {
     local repository="$1"
     local counts
@@ -178,4 +218,21 @@ git_pull_ff_only() {
     local repository="$1"
 
     git_run_network_command "$repository" pull --ff-only
+}
+
+git_reset_hard_to_commit() {
+    local repository="$1"
+    local commit="$2"
+    local output
+
+    GIT_LAST_OUTPUT=""
+    GIT_LAST_ERROR=""
+    output="$(git -C "$repository" reset --hard "$commit" 2>&1)" || {
+        GIT_LAST_OUTPUT="$output"
+        GIT_LAST_ERROR="$(git_message_one_line "$output")"
+        [[ -n "$GIT_LAST_ERROR" ]] || GIT_LAST_ERROR="Git 版本切换失败"
+        return 1
+    }
+    GIT_LAST_OUTPUT="$output"
+    return 0
 }

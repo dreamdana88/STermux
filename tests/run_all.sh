@@ -18,6 +18,7 @@ syntax_files=(
     "$PROJECT_ROOT/core/utils.sh"
     "$PROJECT_ROOT/core/version.sh"
     "$PROJECT_ROOT/modules/sillytavern/update.sh"
+    "$PROJECT_ROOT/modules/sillytavern/rollback.sh"
     "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh"
     "$PROJECT_ROOT/modules/sillytavern/install.sh"
     "$PROJECT_ROOT/modules/sillytavern/extensions.sh"
@@ -37,6 +38,7 @@ syntax_files=(
     "$TEST_ROOT/test_paths.sh"
     "$TEST_ROOT/test_ui.sh"
     "$TEST_ROOT/test_version.sh"
+    "$TEST_ROOT/test_rollback.sh"
 )
 
 printf '%s\n' '== Bash 语法检查 =='
@@ -60,6 +62,7 @@ test_files=(
     "$TEST_ROOT/test_self_update.sh"
     "$TEST_ROOT/test_extensions.sh"
     "$TEST_ROOT/test_version.sh"
+    "$TEST_ROOT/test_rollback.sh"
     "$TEST_ROOT/test_manager.sh"
 )
 

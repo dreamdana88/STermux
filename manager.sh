@@ -37,6 +37,7 @@ load_script_file "$STERMUX_ROOT/modules/sillytavern/install.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/backup-rules.sh"
 load_script_file "$STERMUX_ROOT/core/scheduler.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/update.sh"
+load_script_file "$STERMUX_ROOT/modules/sillytavern/rollback.sh"
 load_script_file "$STERMUX_ROOT/modules/sillytavern/extensions.sh"
 
 SILLYTAVERN_IS_INSTALLED=false

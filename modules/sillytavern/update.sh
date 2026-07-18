@@ -516,10 +516,11 @@ sillytavern_update_menu() {
         sillytavern_update_show_status
         printf '\n1. 检查更新\n'
         printf '2. 执行更新\n'
-        printf '3. 查看更新历史\n'
-        printf '4. 查看技术详情\n'
+        printf '3. 版本回退\n'
+        printf '4. 查看更新历史\n'
+        printf '5. 查看技术详情\n'
         printf '0. 返回主菜单\n\n'
-        ui_menu_prompt '0-4'
+        ui_menu_prompt '0-5'
 
         if ! IFS= read -r choice; then
             return 0
@@ -540,10 +541,14 @@ sillytavern_update_menu() {
                 ui_pause
                 ;;
             3)
-                sillytavern_update_show_history
+                sillytavern_rollback_interactive || true
                 ui_pause
                 ;;
             4)
+                sillytavern_update_show_history
+                ui_pause
+                ;;
+            5)
                 sillytavern_update_show_technical_details
                 ui_pause
                 ;;
@@ -551,7 +556,7 @@ sillytavern_update_menu() {
                 return 0
                 ;;
             *)
-                ui_warning "无效选项，请输入 0、1、2、3 或 4。"
+                ui_warning "无效选项，请输入 0、1、2、3、4 或 5。"
                 ui_pause
                 ;;
         esac

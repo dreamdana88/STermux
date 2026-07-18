@@ -228,7 +228,7 @@ settings_output="$(printf '0\n' | backup_automatic_settings_menu 2>&1)"
     && "$settings_output" == *"2. 设置备份频率"* \
     && "$settings_output" == *"3. 设置最大自动备份数量"* ]] \
     || fail "自动备份设置页信息或菜单不完整"
-home_output="$(ui_main_menu '1.15.0' 'v0.0.2' "$(backup_scheduler_status_text)")"
+home_output="$(ui_main_menu '1.15.0' 'v0.0.3' "$(backup_scheduler_status_text)")"
 [[ "$home_output" == *"自动备份    : 已开启"* ]] || fail "首页没有显示真实自动备份状态"
 
 grep -Fq $'auto-check\t' "$STERMUX_ROOT/data/logs/backup.log" \
@@ -240,6 +240,6 @@ grep -Fq $'catchup\tsuccess' "$STERMUX_ROOT/data/logs/backup.log" \
 grep -Fq $'rotate\tsuccess' "$STERMUX_ROOT/data/logs/backup.log" \
     || fail "日志缺少自动轮换结果"
 
-[[ "$(< "$PROJECT_ROOT/VERSION")" == v0.0.2 ]] || fail "项目 VERSION 未更新为 v0.0.2"
+[[ "$(< "$PROJECT_ROOT/VERSION")" == v0.0.3 ]] || fail "项目 VERSION 未更新为 v0.0.3"
 
 printf '%s\n' 'PASS: Phase 5 开关、频率、scheduled/catchup、失败重试、状态与启动检查测试通过'

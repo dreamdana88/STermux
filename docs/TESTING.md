@@ -233,6 +233,17 @@ git pull 失败
 单个扩展更新失败
 多个扩展同时存在更新
 旧 extension-policy.conf 存在但不影响更新
+正式版本 tag 正常列出、按版本倒序并排除当前版本
+无效、测试版、版本不匹配和非历史祖先 tag 被过滤
+tag 刷新失败时使用本地有效 tag
+回退取消、非法编号和伪造目标均不执行 Git
+tracked 修改、detached HEAD、本地领先、分叉和无 upstream 拒绝回退
+保护备份失败时不执行版本切换
+正常回退后 package.json 正确且仍保持原分支与 upstream
+依赖或 Git 操作失败不伪报成功，并验证原 Commit 恢复结果
+回退不删除未跟踪用户 data、config 和 third-party 数据
+回退后检查更新并重新升级到新版本
+回退日志包含原/目标版本与 Commit、备份、Git、依赖和最终结果
 ```
 
 ### 7.3 必须验证的扩展逻辑
@@ -823,6 +834,20 @@ Termux 实机验证通过
 - 首页真实开关状态与自动备份设置页信息测试
 - 所有测试使用临时 HOME、STermux、SillyTavern、状态文件和备份根目录
 - Android Termux 启动触发、scheduled、catchup、失败重试与轮换实机验证
+
+### Phase 6
+
+- 所有回退测试使用临时本地 Git 仓库、裸远程、虚构版本 tag 和临时用户数据
+- 正式 tag 只接受三段语义版本，且 tag 中 `package.json` 版本必须匹配
+- 当前版本、预发布、带 `v`、无效、版本不匹配及非当前历史 tag 必须过滤
+- 网络刷新失败时只使用本地已验证 tag，不得访问第三方 GitHub 代理
+- 用户取消、非法编号、伪造目标、tracked 修改、detached、无 upstream、领先或分叉均不得执行回退
+- protective 失败必须阻止 Git；成功后才允许安全切换
+- 正常回退必须保持原分支/upstream、正确版本并保留临时用户数据哨兵
+- 依赖失败、Git 失败与最终验证失败不得报告成功，恢复结果必须明确记录
+- 必须验证“回退旧版本 → 检查更新 → 重新升级新版本”完整链路
+- `rollback-history.log` 字段与成功、失败结果必须验证
+- Android Termux 验证真实 tag 列表、保护备份、npm 输出、回退后启动与重新升级
 
 ### 独立终端 UI 优化
 

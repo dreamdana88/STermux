@@ -156,7 +156,7 @@ backup_parse_selection '1,2 1 invalid 999' || fail "安全多选解析失败"
 [[ ${#BACKUP_SELECTED_INDEXES[@]} -eq 2 ]] || fail "多选未过滤非法编号或去重"
 
 manual_index="$(backup_index_by_id "$MANUAL_ID")" || fail "无法定位 manual 备份"
-cancel_output="$(printf '%s\n\n' "$((manual_index + 1))" | backup_delete_interactive false 2>&1)"
+cancel_output="$(printf '%s\n\n' "$((manual_index + 1))" | backup_delete_interactive 2>&1)"
 [[ "$cancel_output" == *"已取消删除"* ]] || fail "默认 N 未取消删除"
 [[ -d "$MANUAL_PATH" ]] || fail "取消后 manual 仍被删除"
 
@@ -165,14 +165,14 @@ DELETE_MANUAL_PATH="$BACKUP_LAST_PATH"
 DELETE_MANUAL_ID="$(basename -- "$DELETE_MANUAL_PATH")"
 backup_inventory_scan || fail "单删前扫描失败"
 delete_manual_index="$(backup_index_by_id "$DELETE_MANUAL_ID")" || fail "无法定位单删 manual"
-printf '%s\ny\n' "$((delete_manual_index + 1))" | backup_delete_interactive false >/dev/null \
+printf '%s\ny\n' "$((delete_manual_index + 1))" | backup_delete_interactive >/dev/null \
     || fail "单个 manual 删除流程失败"
 [[ ! -e "$DELETE_MANUAL_PATH" ]] || fail "用户确认后未删除 manual"
 
 backup_inventory_scan || fail "单删自动备份前扫描失败"
 scheduled_id="$(basename -- "$SCHEDULED_PATH")"
 scheduled_index="$(backup_index_by_id "$scheduled_id")" || fail "无法定位 scheduled"
-printf '%s\ny\n' "$((scheduled_index + 1))" | backup_delete_interactive false >/dev/null \
+printf '%s\ny\n' "$((scheduled_index + 1))" | backup_delete_interactive >/dev/null \
     || fail "单个 automatic 删除流程失败"
 [[ ! -e "$SCHEDULED_PATH" ]] || fail "用户确认后未删除 automatic"
 
@@ -184,7 +184,7 @@ backup_inventory_scan || fail "批量删除前扫描失败"
 batch_one_index="$(backup_index_by_id "$(basename -- "$BATCH_ONE_PATH")")" || fail "无法定位批量 Fixture 1"
 batch_two_index="$(backup_index_by_id "$(basename -- "$BATCH_TWO_PATH")")" || fail "无法定位批量 Fixture 2"
 printf '%s,%s %s invalid 999\ny\n' "$((batch_one_index + 1))" "$((batch_two_index + 1))" \
-    "$((batch_one_index + 1))" | backup_delete_interactive true >/dev/null || fail "批量删除流程失败"
+    "$((batch_one_index + 1))" | backup_delete_interactive >/dev/null || fail "批量删除流程失败"
 [[ ! -e "$BATCH_ONE_PATH" && ! -e "$BATCH_TWO_PATH" ]] || fail "批量删除未处理全部选择"
 
 create_backup_at 800 manual "failure isolation" || fail "无法创建失败隔离 Fixture"

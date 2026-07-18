@@ -199,7 +199,7 @@ GPT-SoVITS 相关工具
 ============================================
 
 SillyTavern : 1.15.0
-STermux     : v0.0.2
+STermux     : v0.0.3
 自动备份    : 已关闭
 
 --------------------------------------------
@@ -1043,7 +1043,7 @@ catchup
 
 manual 的“永久保留”仅表示不参与自动清理，不禁止用户主动删除。
 
-必须支持：
+使用一个统一的“删除备份”入口，同时支持：
 
 ```text
 删除单个备份
@@ -1174,33 +1174,51 @@ BACKUP_STATUS="success"
 
 # 28. Git 版本回退
 
-版本回退仅负责 SillyTavern 程序代码。
+版本回退仅负责 SillyTavern 程序代码，入口位于 SillyTavern 更新中心。普通用户只从经过验证的正式语义版本列表中选择，不接受任意 Commit、分支、tag 或路径输入。
 
-V1 优先支持：
-
-```text
-回退上一次更新
-查看最近更新记录
-恢复到当前远程最新版
-```
-
-后续支持：
+正式版本来源：
 
 ```text
-选择历史 Commit
-选择 Tag
+当前分支对应的官方 Git remote
+    ↓
+刷新本地与远程 tag
+    ↓
+只接受不带 v 的三段正式版本 tag，例如 1.18.0
+    ↓
+要求 tag 中 package.json version 与 tag 完全一致
+    ↓
+要求目标 Commit 是当前 HEAD 的历史祖先
+    ↓
+只显示当前版本之前的版本，并按版本倒序排列
 ```
 
-回退前：
+官方 tag 网络刷新失败时，可以继续使用本地已有且通过相同验证的 tag。不得内置或自动使用第三方 GitHub 代理。
+
+执行前必须验证有效 ST_PATH、Git 仓库、正常分支、HEAD、upstream、目标版本和 tracked 工作区。detached HEAD、无 upstream、本地领先、分叉、合并冲突或 tracked 文件修改均必须停止；未跟踪的用户 data 不得被当作程序修改强制删除。
+
+回退流程：
 
 ```text
-显示目标 Commit
-显示当前 Commit
-询问确认
-按配置创建 protective 备份
+显示当前版本与目标版本及兼容性风险
+    ↓
+用户明确确认，默认 N
+    ↓
+创建完整 protective 保护备份
+    ↓
+保护备份成功后，在当前正常分支上将 HEAD 安全指向已验证 tag Commit
+    ↓
+保持原分支名和 upstream，不进入 detached HEAD
+    ↓
+同步目标版本生产 Node Modules，并持续显示输出与耗时心跳
+    ↓
+验证 HEAD、package.json、安装结构、分支和 upstream
+    ↓
+记录 data/state/rollback-history.log
 ```
 
-版本回退不得默认覆盖用户数据。
+代码切换使用已验证目标 Commit 的 `git reset --hard`，但只有在 tracked 工作区完全干净、已保存原 Commit 且保护备份成功后才允许执行。不得运行 `git clean`，不得删除未跟踪用户数据。Git、依赖或最终验证失败时不得报告成功；代码已切换后失败应尽力恢复原 Commit，但不得自动恢复用户数据备份。
+
+回退后当前分支会落后 upstream，现有更新中心必须仍能通过原 `git pull --rebase --autostash` 流程重新升级到当前 release 最新版本。
 
 ---
 
@@ -1917,10 +1935,10 @@ pull 失败
 
 ### 版本显示
 
-STermux 使用项目根目录 `VERSION` 作为单一可信版本来源，Phase 5 版本为：
+STermux 使用项目根目录 `VERSION` 作为单一可信版本来源，Phase 6 版本为：
 
 ```text
-v0.0.2
+v0.0.3
 ```
 
 版本号只用于用户友好展示，不替代 Git upstream 与 Commit 状态判断。Git Commit 信息仅在技术详情显示。
@@ -2156,10 +2174,14 @@ catchup 补偿备份
 实现：
 
 ```text
-回退上一次更新
-读取更新历史
-回到当前远程最新版
-回退前 protective 备份
+官方正式 tag 获取、过滤与本地降级
+只允许从验证列表选择历史版本
+tracked 修改、detached、分叉与无 upstream 保护
+回退前 protective 完整备份
+保持 release 分支和 upstream 的安全代码回退
+Node Modules 依赖同步与失败恢复
+回退日志
+回退后通过现有更新中心重新升级
 ```
 
 完成标准：
@@ -2167,6 +2189,8 @@ catchup 补偿备份
 ```text
 用户可以回退 SillyTavern 程序代码
 用户数据不会被版本回退默认覆盖
+回退后不处于 detached HEAD
+回退后仍可正常升级到当前 release 最新版本
 ```
 
 ---

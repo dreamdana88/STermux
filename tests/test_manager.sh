@@ -44,6 +44,7 @@ create_isolated_project() {
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/rollback.sh" \
         "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$target/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$target/modules/stermux/update.sh" || return 1
@@ -98,6 +99,7 @@ run_user_config_isolation_regression() {
         "$PROJECT_ROOT/modules/sillytavern/install.sh" \
         "$PROJECT_ROOT/modules/sillytavern/backup-rules.sh" \
         "$PROJECT_ROOT/modules/sillytavern/update.sh" \
+        "$PROJECT_ROOT/modules/sillytavern/rollback.sh" \
         "$PROJECT_ROOT/modules/sillytavern/extensions.sh" \
         "$poison_source/modules/sillytavern/" || return 1
     cp -- "$PROJECT_ROOT/modules/stermux/update.sh" "$poison_source/modules/stermux/update.sh" || return 1
@@ -149,7 +151,7 @@ status=$?
 [[ "$output" == *"TEST_MANAGER_LAUNCH_OK"* ]] || fail "未调用 SillyTavern Fixture start.sh"
 [[ "$output" != *"1. 安装 SillyTavern"* ]] || fail "已有 SillyTavern 时仍显示安装入口"
 [[ "$output" == *"SillyTavern : 1.15.0"* ]] || fail "主菜单未显示本地 SillyTavern 版本"
-[[ "$output" == *"STermux     : v0.0.2"* ]] || fail "主菜单未显示 STermux VERSION"
+[[ "$output" == *"STermux     : v0.0.3"* ]] || fail "主菜单未显示 STermux VERSION"
 [[ "$output" == *"自动备份    : 已关闭"* ]] || fail "默认自动备份状态不正确"
 [[ "$output" == *"SillyTavern 首次启动需要安装 Node Modules"* ]] || fail "首次启动缺少 Node Modules 耗时提示"
 [[ "$output" == *"此过程可能需要几分钟"* ]] || fail "首次启动缺少耐心等待提示"
@@ -174,18 +176,19 @@ automatic_home_status=$?
     config_set_value AUTO_BACKUP_ENABLED false
 ) || fail "无法恢复隔离自动备份关闭状态"
 
-update_menu_output="$(printf '2\n4\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+update_menu_output="$(printf '2\n5\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 update_menu_status=$?
 (( update_menu_status == 0 )) || fail "更新中心菜单返回退出码 $update_menu_status"
 [[ "$update_menu_output" == *"更新状态"* ]] || fail "主菜单未进入更新中心"
-[[ "$update_menu_output" == *"4. 查看技术详情"* ]] || fail "更新中心缺少技术详情入口"
+[[ "$update_menu_output" == *"3. 版本回退"* ]] || fail "更新中心缺少版本回退入口"
+[[ "$update_menu_output" == *"5. 查看技术详情"* ]] || fail "更新中心缺少技术详情入口"
 [[ "$update_menu_output" == *"Upstream"* ]] || fail "技术详情未显示 Upstream"
 
 self_update_output="$(printf '5\n3\n\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
 self_update_status=$?
 (( self_update_status == 0 )) || fail "STermux 更新菜单返回退出码 $self_update_status"
 [[ "$self_update_output" == *"STermux 更新"* ]] || fail "主菜单未进入 STermux 更新页面"
-[[ "$self_update_output" == *"当前版本 : v0.0.2"* ]] || fail "STermux 更新页面未使用统一 VERSION"
+[[ "$self_update_output" == *"当前版本 : v0.0.3"* ]] || fail "STermux 更新页面未使用统一 VERSION"
 [[ "$self_update_output" == *"STermux 更新技术详情"* ]] || fail "STermux 更新页面缺少技术详情"
 
 extension_menu_output="$(printf '3\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
@@ -201,10 +204,20 @@ backup_menu_output="$(printf '4\n1\n\n2\n\n0\n0\n' | HOME="$test_home" bash "$is
 backup_menu_status=$?
 (( backup_menu_status == 0 )) || fail "备份菜单返回退出码 $backup_menu_status"
 [[ "$backup_menu_output" == *"备份与恢复"* ]] || fail "主菜单未进入备份与恢复页面"
+[[ "$backup_menu_output" == *$'3. 恢复备份\n4. 删除备份\n5. 自动备份设置'* ]] \
+    || fail "备份菜单没有合并单选与多选删除入口"
+[[ "$backup_menu_output" != *"删除一个备份"* && "$backup_menu_output" != *"选择多个备份删除"* ]] \
+    || fail "备份菜单仍显示旧的拆分删除入口"
 [[ "$backup_menu_output" == *"手动备份创建成功"* ]] || fail "管理器未能创建隔离 manual 备份"
 [[ "$backup_menu_output" == *"手动备份"* ]] || fail "备份列表未使用中文手动备份类型"
 find "$isolated_project/backups/sillytavern" -mindepth 1 -maxdepth 1 -type d | grep -q . \
     || fail "隔离管理器没有生成备份目录"
+
+backup_settings_output="$(printf '4\n5\n0\n0\n' | HOME="$test_home" bash "$isolated_project/manager.sh" 2>&1)"
+backup_settings_status=$?
+(( backup_settings_status == 0 )) || fail "合并菜单后的自动备份设置入口返回异常"
+[[ "$backup_settings_output" == *"自动备份设置"* ]] \
+    || fail "备份菜单编号 5 未进入自动备份设置"
 
 settings_output="$(printf '6\n4\n\n5\n\n0\n0\n' | HOME="$test_home" SHELL=/bin/bash bash "$isolated_project/manager.sh" 2>&1)"
 settings_status=$?
@@ -217,7 +230,7 @@ settings_status=$?
 [[ "$settings_output" == *$'1. 设置 SillyTavern 路径\n2. 脚本自启：已关闭（Bash）\n3. 颜色显示：已开启\n\n4. 查看当前 SillyTavern 路径\n5. 查看 STermux 版本信息\n\n6. 卸载管理'* ]] \
     || fail "设置菜单逻辑分组空行错误"
 [[ "$settings_output" == *"当前 SillyTavern 路径："* ]] || fail "设置页面无法查看当前路径"
-[[ "$settings_output" == *"STermux 版本：v0.0.2"* ]] || fail "设置页面无法查看 STermux 版本"
+[[ "$settings_output" == *"STermux 版本：v0.0.3"* ]] || fail "设置页面无法查看 STermux 版本"
 [[ "$settings_output" != *"[路径]"* && "$settings_output" != *"[启动]"* ]] \
     || fail "设置页不应为单个功能增加分组标题"
 
